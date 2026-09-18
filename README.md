@@ -11,6 +11,7 @@ Aplicação web servida via **Google Apps Script (Web App)** usada pelos analist
 - [Modelo de persistência](#modelo-de-persistência)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Análise técnica e pontos de melhoria](#análise-técnica-e-pontos-de-melhoria)
+- [Persistência com compressão gzip e chunking — nota técnica](#persistência-com-compressão-gzip-e-chunking--nota-técnica)
 - [Exportação para Wiki Markup (Confluence) — nota técnica](#exportação-para-wiki-markup-confluence--nota-técnica)
 - [Roadmap sugerido](#roadmap-sugerido)
 
@@ -69,12 +70,18 @@ mapeamento-de-marcas/
 
 ## Modelo de persistência
 
-O "banco de dados" é uma única chave (`RASCUNHO_MAPEAMENTO_COMPLETO`) nas *User Properties* do Apps Script, por usuário autenticado. O valor salvo é um JSON `{ conteudoHTML, timestamp }`, onde `conteudoHTML` é o `innerHTML` completo do container do documento.
+O "banco de dados" é um conjunto de chaves nas *User Properties* do Apps Script, por usuário autenticado:
+
+- `RASCUNHO_META`: metadado com a quantidade de "chunks" (pedaços) usados na última gravação — `{ chunks: N }`.
+- `RASCUNHO_CHUNK_0`, `RASCUNHO_CHUNK_1`, ...: pedaços de até 8000 caracteres do JSON `{ conteudoHTML, timestamp }` (onde `conteudoHTML` é o `innerHTML` completo do container do documento), **comprimido com gzip e codificado em base64** antes de ser fatiado.
+- `RASCUNHO_MAPEAMENTO_COMPLETO`: formato legado (string única, sem compressão), mantido apenas como *fallback* de leitura para rascunhos salvos antes desta mudança — nunca mais é escrito.
+
+Ver [nota técnica sobre compressão/chunking](#persistência-com-compressão-gzip-e-chunking--nota-técnica) para detalhes da implementação.
 
 ## Limitações conhecidas
 
-- `PropertiesService` tem limite de **9 KB por valor** e **500 KB de armazenamento total por usuário/script**. Como o valor salvo é o HTML inteiro (com todas as classes Tailwind, ícones etc.), projetos com muitas lojas/exceções podem estourar esse limite — hoje o `.withFailureHandler` ao menos avisa o usuário visualmente (ver item 7.2 da análise, ainda pendente na raiz do problema).
-- Existe **apenas 1 slot de rascunho por usuário** — um analista que mapeia mais de uma marca no mesmo dia sobrescreve o rascunho anterior sem aviso (ver item 7.1 da análise).
+- `PropertiesService` tem limite de **9 KB por valor** e **500 KB de armazenamento total por usuário/script**. O HTML inteiro do documento facilmente ultrapassa 9 KB brutos (o template real já fica em ~40 KB só com o Nível 1 preenchido) — por isso o valor é comprimido (gzip) e fatiado em múltiplos "chunks" antes de ser salvo (ver [nota técnica](#persistência-com-compressão-gzip-e-chunking--nota-técnica)). Com compressão de ~80% em conteúdo real, a margem prática antes de esbarrar no limite total de 500 KB é bem maior, mas projetos **extremamente** grandes (centenas de lojas/exceções) ainda podem, em teoria, atingi-lo.
+- Existe **apenas 1 slot de rascunho por usuário** (`RASCUNHO_META`/`RASCUNHO_CHUNK_*` são chaves fixas). Avaliado como **não sendo um problema prático**: o app já tem **Exportar/Importar projeto (.json)**, que cobre o cenário de um analista trabalhando em mais de uma marca — basta exportar o projeto atual antes de começar o próximo. Ver item 7.1 da análise para o raciocínio completo.
 - Não há histórico/versionamento: o auto-save (por debounce, ~3s após a última edição) sobrescreve o estado anterior a cada save.
 
 ---
@@ -110,16 +117,49 @@ Revisão do estado atual do código (`Index.html` + `Code.gs`), em 2026-09-18, c
 
 > Não foi adotado `DOMPurify` (biblioteca externa) porque isso exigiria mais uma dependência de CDN (ver item 7.6, ainda em aberto) — a sanitização por *allowlist* acima cobre o cenário de risco real do app (HTML colado num `contenteditable` ou um `.json` de projeto de origem não totalmente confiável) sem quebrar os `onclick` que o próprio app depende para funcionar.
 
-### 🟡 Pendências reais que ainda restam (mudanças de arquitetura, fora do escopo de um fix pontual)
+**7.2. Limite de 9 KB por propriedade — resolvido.** Foi confirmado, inclusive, que esse limite **já era ultrapassado na prática**: o HTML real do template (só o Nível 1 preenchido, sem nenhuma loja de exceção) já fica em ~40 KB, muito acima dos 9 KB permitidos por valor no `PropertiesService` — ou seja, o auto-save provavelmente já falhava silenciosamente em qualquer uso real antes desta correção (o item 2, feito em sessão anterior, ao menos passou a *avisar* essa falha, mas não resolvia a causa raiz).
+
+A solução implementada em `Code.gs` **não exige nenhuma dependência externa nem migração para um novo modelo de dados** — usa apenas recursos nativos do Apps Script:
+1. O JSON salvo é comprimido com **`Utilities.gzip()`** (gzip nativo do Apps Script) e codificado em base64 antes de ser persistido. Testado com o HTML real do projeto: **~80% de redução** (41 KB → ~8 KB), graças à repetição de classes Tailwind.
+2. O resultado comprimido é **fatiado em múltiplos "chunks"** (`RASCUNHO_CHUNK_0`, `RASCUNHO_CHUNK_1`, ...) de até 8000 caracteres cada, cobrindo também projetos grandes o bastante para ultrapassar os 9 KB mesmo após a compressão (várias lojas/exceções). Uma chave de metadado (`RASCUNHO_META`) registra quantos chunks foram usados na última gravação.
+3. Ao salvar um documento **menor** que o anterior, os chunks "órfãos" da gravação antiga são removidos (evita lixo acumulado).
+4. **Compatibilidade com rascunhos antigos**: se não existir `RASCUNHO_META` (usuário que já tinha um rascunho salvo no formato antigo, sem compressão), `carregarEstadoCompleto()` cai de volta para a chave legada `RASCUNHO_MAPEAMENTO_COMPLETO`, sem quebrar o carregamento. Essa chave legada nunca mais é escrita — o próximo save do usuário já migra para o novo formato.
+5. **Validado com uma simulação funcional** (mock de `PropertiesService`/`Utilities` com `zlib` do Node, replicando a mesma lógica): roundtrip de salvar/carregar com documento pequeno e grande (multi-chunk), limpeza de chunks órfãos ao salvar um documento menor, fallback para o formato legado e reset — todos os cenários passaram. Não foi possível testar chamando o `Utilities.gzip()` real do Apps Script (só roda no ambiente do Google), mas a lógica é a mesma.
+
+Ver [nota técnica completa](#persistência-com-compressão-gzip-e-chunking--nota-técnica) para mais detalhes de implementação.
+
+### ⚪ Avaliado e não implementado por decisão de escopo
+
+**7.1. Um único slot de rascunho por usuário.** Após discussão, decidiu-se **não implementar** namespacing/múltiplos projetos por usuário: o app já tem **Exportar/Importar projeto (.json)**, que cobre exatamente esse cenário — um analista que for começar o mapeamento de uma nova marca pode exportar o projeto atual antes, e importá-lo de volta depois se precisar retomá-lo. Adicionar um sistema de múltiplos slots (seleção de projeto, `?projeto=` na URL, etc.) agregaria complexidade a mais na camada de persistência (novas chaves, migração, UI de seleção) para resolver um problema que já tem uma solução manual razoável e sob controle do próprio analista. Caso o padrão de uso mude no futuro (ex.: muitos analistas reclamando de perda de rascunho), vale reconsiderar.
+
+### 🟡 Pendências reais que ainda restam (mudanças de arquitetura maiores)
 
 | # | Problema | Impacto | Sugestão |
 |---|----------|---------|----------|
-| 7.1 | **Um único slot de rascunho por usuário** (`RASCUNHO_MAPEAMENTO_COMPLETO` é uma chave fixa em `Code.gs`). Um analista que trabalha em 2+ marcas no mesmo dia sobrescreve o rascunho anterior sem aviso. | Alto — perda silenciosa de trabalho. | Namespacing por projeto/marca (ex.: um ID de projeto na URL/`?projeto=`, chave `RASCUNHO_<id>`), ou lista de projetos salvos. |
-| 7.2 | **Limite de 9 KB por propriedade** do `PropertiesService` vs. salvar o HTML inteiro como string. Projetos com várias exceções passam facilmente desse limite. | Alto — falha silenciosa (o `.withFailureHandler` agora ao menos avisa o usuário, mas o limite em si continua existindo). | Migrar de "salvar HTML" para um **modelo de dados JSON estruturado** (array de módulos/lojas/exceções) e renderizar o HTML a partir dele; ou fragmentar em várias chaves no `PropertiesService`, ou usar Drive/Sheets como storage para documentos grandes. |
 | 7.6 | **Dependência de 3 CDNs externos** (Tailwind, Lucide, Google Fonts) carregados a cada acesso, sem fallback caso a rede/CDN falhe (comum em ambientes corporativos com proxy/allowlist restritiva). | Médio — pode quebrar a aplicação inteira em rede corporativa restrita. | Avaliar build local do Tailwind (CLI) e vendorizar os ícones usados, eliminando dependência de rede externa. |
 | 7.7 | **Nenhum controle de versão** do projeto Apps Script (não há `.clasp.json`/histórico Git). | Médio — dificulta rollback e revisão de mudanças. | Adotar `clasp` + repositório Git (mesmo que privado) para o projeto Apps Script. |
 
-Os itens 7.1, 7.2, 7.6 e 7.7 exigem decisões de arquitetura (modelo de dados, storage, processo de deploy) e não foram implementados automaticamente nesta revisão — recomenda-se discuti-los antes de qualquer mudança, dado o impacto em como o app persiste e é publicado.
+
+Os itens 7.6 e 7.7 exigem decisões de arquitetura/processo (build de assets, workflow de deploy) e ainda não foram implementados — ver seção [Roadmap sugerido](#roadmap-sugerido) para a proposta de próximos passos.
+
+## Persistência com compressão gzip e chunking — nota técnica
+
+Implementado inteiramente em `Code.gs`, sem nenhuma dependência externa (usa apenas `Utilities`, nativo do Apps Script). Resolve o item 7.2 da análise técnica.
+
+**Por que era necessário:** o estado salvo é o `innerHTML` completo do documento (Nível 1 + Nível 2, com todas as classes Tailwind). Mesmo um projeto simples (só o Nível 1 preenchido, sem nenhuma loja de exceção) já gera um HTML de ~40 KB — muito acima do limite de **9 KB por valor** do `PropertiesService`. Ou seja, o auto-save já estava, na prática, sujeito a falhar silenciosamente antes desta correção (o `.withFailureHandler`, adicionado em sessão anterior, passou a *avisar* a falha, mas não resolvia a causa).
+
+**Como funciona (`salvarEstadoCompleto` / `carregarEstadoCompleto` / `resetarParaModeloPadrao`):**
+
+1. **Compressão**: o JSON recebido (`{ conteudoHTML, timestamp }`) é comprimido com `Utilities.gzip()` e o resultado binário é codificado em base64 com `Utilities.base64Encode()` — texto HTML com muitas classes Tailwind repetidas comprime muito bem (~80% de redução medida com o template real do projeto: 41 KB → ~8 KB).
+2. **Fatiamento (chunking)**: a string base64 comprimida é dividida em pedaços de até 8000 caracteres (`TAMANHO_CHUNK`), cada um salvo em uma propriedade própria (`RASCUNHO_CHUNK_0`, `RASCUNHO_CHUNK_1`, ...), com folga sob o limite de 9 KB por valor. Isso cobre também projetos grandes o bastante para ultrapassar 9 KB mesmo já comprimidos (muitas lojas/exceções).
+3. **Metadado**: `RASCUNHO_META` guarda `{ chunks: N }`, usado para saber quantos pedaços reconstituir na leitura.
+4. **Limpeza de chunks órfãos**: ao salvar um documento **menor** que o anterior (ex.: usuário removeu várias exceções), os chunks que sobraram da gravação anterior são excluídos antes de escrever os novos, evitando lixo acumulado.
+5. **Compatibilidade com rascunhos antigos**: se `RASCUNHO_META` não existir (usuário que já tinha um rascunho salvo antes desta mudança, no formato de string única sem compressão), `carregarEstadoCompleto()` cai de volta para a chave legada `RASCUNHO_MAPEAMENTO_COMPLETO`. Essa chave nunca mais é escrita — o próximo save do usuário já migra automaticamente para o novo formato comprimido/fatiado.
+6. **Reset**: `resetarParaModeloPadrao()` limpa tanto os chunks do formato novo quanto a chave legada.
+
+**A interface com o front-end não mudou**: `Index.html` continua chamando `google.script.run.salvarEstadoCompleto(json)` / `.carregarEstadoCompleto()` exatamente como antes — toda a lógica de compressão/fatiamento é transparente para quem consome essas funções.
+
+**Validação**: como `Utilities.gzip`/`Utilities.base64Encode` só existem no runtime do Apps Script (não é possível rodá-los localmente), a lógica foi validada por uma simulação funcional em Node.js, substituindo `PropertiesService`/`Utilities` por mocks equivalentes (usando o módulo `zlib` para gzip real) e executando o código de `Code.gs` num sandbox de `vm`. Cenários testados com sucesso: roundtrip de salvar/carregar com documento pequeno (1 chunk) e grande (múltiplos chunks), limpeza de chunks órfãos ao salvar um documento menor depois de um maior, fallback para o formato legado sem `RASCUNHO_META`, e reset completo.
 
 ## Exportação para Wiki Markup (Confluence) — nota técnica
 
@@ -143,13 +183,19 @@ Em ambos os casos, o fluxo final é: sincronizar `<textarea>`s sem disparar o ob
 
 ## Roadmap sugerido
 
-1. **Curto prazo (baixo esforço, alto impacto)**
-   - Corrigir o bug do `confirm()` de cancelamento (#3).
-   - Adicionar `.withFailureHandler` em todas as chamadas `google.script.run` (#2).
-   - Trocar `setInterval` fixo por debounce + dirty flag (#6).
-2. **Médio prazo**
-   - Corrigir geração de IDs com contador incremental persistido (#4).
-   - Melhorar `obterHTMLTratado()` para remover scripts/estilos externos antes de exportar (#5).
-   - Namespacing de rascunhos por projeto (#7.1).
-3. **Longo prazo (mudança estrutural)**
-   - Migrar o modelo de estado de "HTML serializado" para um **JSON estruturado** (lojas, exceções, módulos como arrays de objetos), resolvendo de uma vez os itens #7.2 e parte do #7.3, e permitindo relatórios/validações futuras (ex.: exportar para planilha, dashboards).
+1. **✅ Concluído**
+   - Bug do `confirm()` de cancelamento (#3).
+   - `.withFailureHandler` em todas as chamadas `google.script.run` (#2).
+   - Debounce + dirty flag no auto-save, no lugar do `setInterval` fixo (#6).
+   - Geração de IDs com contador incremental persistido (#4).
+   - `obterHTMLTratado()` exportando só o conteúdo do documento, sem scripts/CDNs (#5).
+   - Sanitização por *allowlist* do HTML restaurado/importado (#7.3).
+   - Confirmação antes de sobrescrever no import (#7.4) e overlay de carregamento inicial (#7.5).
+   - Unificação de `criarLojaCompleta()` (#7.8).
+   - Compressão gzip + chunking na persistência, resolvendo o limite de 9 KB por valor (#7.2).
+2. **Avaliado e descartado por decisão de escopo**
+   - Namespacing de múltiplos rascunhos por usuário (#7.1) — o Exportar/Importar `.json` já cobre esse caso de uso sem adicionar complexidade à persistência.
+3. **Em aberto — próximos passos sugeridos**
+   - **Vendorizar as 3 dependências de CDN** (#7.6): substituir `cdn.tailwindcss.com` por um CSS compilado localmente (Tailwind CLI, gerado uma vez e embutido no `<style>`), inlinar como SVG estático os ícones Lucide efetivamente usados (eliminando o `<script src="unpkg.com/lucide">`), e trocar o `@import` de fonte do Google Fonts por uma pilha de fontes de sistema (ou hospedar o arquivo de fonte junto ao projeto). Reduz a dependência de rede em ambientes corporativos restritivos.
+   - **Adotar `clasp` + Git** (#7.7): inicializar um repositório Git para este projeto e configurar `clasp` (`clasp clone`/`clasp push`/`clasp pull`) para sincronizar com o Apps Script, permitindo histórico de commits, revisão de mudanças e rollback — hoje o único "histórico" é a memória de quem editou o script diretamente no editor do Apps Script.
+   - **Migração para modelo de dados estruturado** (JSON com arrays de módulos/lojas/exceções, renderizando o HTML a partir dele): não é mais urgente para resolver o limite de 9 KB (já coberto pela compressão/chunking), mas continua sendo uma melhoria de longo prazo que habilitaria relatórios, validações de dados e exportações adicionais (ex.: planilha, dashboard) — considerar apenas se o app crescer em complexidade a ponto de justificar o esforço de reescrita.
