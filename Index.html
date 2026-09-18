@@ -1,0 +1,1652 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modelos de Mapeamento de Marcas</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      .tab-active {
+        border-bottom: 2px solid #2563eb;
+        color: #2563eb;
+        font-weight: 600;
+      }
+      /* Destaque suave nos campos editáveis ao passar o mouse ou focar */
+      [contenteditable="true"]:hover {
+        outline: 1px dashed #93c5fd;
+        border-radius: 4px;
+      }
+      [contenteditable="true"]:focus {
+        outline: 2px solid #2563eb;
+        border-radius: 4px;
+        background-color: #eff6ff;
+        color: #1e293b; /* Força o texto a ficar escuro ao editar qualquer campo */
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 antialiased min-h-screen pb-12">
+    <!-- Top Navigation Header / Overlay -->
+    <div 
+        id="sidebar-overlay" 
+        onclick="toggleSidebar()" 
+        class="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm hidden transition-all duration-300 sm:hidden"
+    ></div>
+
+    <!-- Botão Hamburguer para Telas Menores / Mobile -->
+    <button 
+        onclick="toggleSidebar()"
+        type="button" 
+        class="inline-flex items-center p-2 mt-2 ms-3 text-sm text-slate-500 rounded-lg sm:hidden hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200"
+    >
+        <span class="sr-only">Abrir menu</span>
+        <i data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+
+    <!-- Sidebar Lateral -->
+    <aside 
+        id="default-sidebar" 
+        class="fixed top-0 left-0 z-40 w-64 h-screen transition-transform duration-300 -translate-x-full sm:translate-x-0 bg-white border-r border-slate-200 flex flex-col justify-between" 
+        aria-label="Sidebar"
+    >
+      <div class="h-full px-4 py-5 overflow-y-auto flex flex-col justify-between">
+          
+          <!-- Topo da Sidebar: Identificação da Aplicação -->
+          <div class="space-y-6">
+            <div class="flex items-center space-x-3 px-2">
+                <div class="bg-blue-600 text-white p-2 rounded-lg">
+                  <i data-lucide="store" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h1 class="text-sm font-bold text-slate-900 leading-tight">Mapeamento - TOTVS Linx</h1>
+                  <p class="text-[10px] text-slate-500">Documentação & Rollout</p>
+                </div>
+            </div>
+
+            <!-- Navegação de Abas -->
+            <div class="space-y-1">
+                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Navegação</span>
+                <button onclick="switchTab('nivel1')" id="tab-nivel1" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="shield-check" class="w-4 h-4"></i>
+                  <span>Nível 1: Padrão</span>
+                </button>
+                <button onclick="switchTab('nivel2')" id="tab-nivel2" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="git-branch" class="w-4 h-4"></i>
+                  <span>Nível 2: Exceções</span>
+                </button>
+            </div>
+
+            <hr class="border-slate-200" />
+
+            <!-- Bloco de Ações do Projeto (Persistência e Backup) -->
+            <div class="space-y-1">
+                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Projeto & Dados</span>
+                
+                <!-- Input oculto para upload de JSON -->
+                <input type="file" id="input-importar-json" accept=".json" class="hidden" onchange="importarArquivoProjeto(event)">
+
+                <button onclick="document.getElementById('input-importar-json').click()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
+                  <span>Abrir Projeto (.json)</span>
+                </button>
+
+                <button onclick="exportarArquivoProjeto()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="save" class="w-4 h-4 text-slate-500"></i>
+                  <span>Salvar Projeto (.json)</span>
+                </button>
+            </div>
+
+            <hr class="border-slate-200" />
+
+            <!-- Bloco de Exportação de HTML (Jira) -->
+            <div class="space-y-1">
+                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Exportar para Share Jira</span>
+
+                <!-- Ocultos: a exportação em HTML "limpo" perde quase todo o design
+                     original ao ser colada no Confluence (ver decisão registrada em
+                     sessão). As funções copiarHTMLJira()/baixarHTML() continuam no
+                     código para uma eventual reativação futura. -->
+                <button onclick="copiarHTMLJira()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors">
+                  <i data-lucide="code" class="w-4 h-4"></i>
+                  <span>Copiar HTML Limpo</span>
+                </button>
+
+                <button onclick="baixarHTML()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-900 text-white shadow-sm transition-colors">
+                  <i data-lucide="download" class="w-4 h-4"></i>
+                  <span>Baixar .html</span>
+                </button>
+
+                <button onclick="copiarWikiMarkupNivel1()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
+                  <i data-lucide="file-code-2" class="w-4 h-4"></i>
+                  <span>Copiar Wiki Markup (Nível 1)</span>
+                </button>
+
+                <button onclick="copiarWikiMarkupNivel2()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors">
+                  <i data-lucide="file-code-2" class="w-4 h-4"></i>
+                  <span>Copiar Wiki Markup (Nível 2)</span>
+                </button>
+            </div>
+          </div>
+
+          <!-- Rodapé da Sidebar -->
+          <div class="border-t border-slate-100 pt-3 space-y-2">
+            <div class="text-[11px] text-slate-400 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Auto-save Google ativo</span>
+            </div>
+            <button onclick="limparRascunhoGoogle()" class="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+              <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+              Resetar modelo padrão
+            </button>
+          </div>
+
+      </div>
+    </aside>
+
+    <!-- Main Container (AJUSTADO PARA sm:ml-64 PARA NÃO COBRIR O CONTEÚDO) -->
+    <div class="p-4 sm:ml-64">
+        <main
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4"
+        id="documento-container"
+        >
+        <!-- ========================================== -->
+        <!-- TAB 1: NÍVEL 1 - PADRÃO DA MARCA           -->
+        <!-- ========================================== -->
+        <div id="content-nivel1" class="tab-content space-y-8">
+            <!-- Banner / Alert Info -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-blue-900 flex items-start gap-3">
+              <i data-lucide="info" class="w-5 h-5 text-blue-600 mt-0.5 shrink-0"></i>
+              <div class="text-sm" contenteditable="true">
+                  <strong class="font-semibold">Instruções:</strong> Este documento
+                  define as configurações padrão da rede. Todas as lojas assumem estas
+                  configurações, a menos que haja uma exceção registrada no documento
+                  de Nível 2.
+              </div>
+            </div>
+
+            <!-- Visão Geral do Projeto -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-4 flex items-center justify-between">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="clipboard-list" class="w-5 h-5 text-blue-600"></i>
+                    📋 Visão Geral do Projeto
+                  </h2>
+              </div>
+              <div class="p-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Nome da Marca / Projeto</span>
+                        <span id="campo-nome-marca-projeto" contenteditable="true" class="text-slate-900 font-medium block">[Nome da Marca]</span>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Analista de Projeto</span>
+                        <span contenteditable="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        @Analista
+                        </span>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Analistas de Implantação</span>
+                        <div class="flex gap-1 flex-wrap" contenteditable="true">
+                          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_1</span>
+                          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_2</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">ECS Responsável</span>
+                        <span contenteditable="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        @ECS
+                        </span>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Qtd. Lojas Inicial</span>
+                        <span contenteditable="true" class="text-slate-900 font-bold block">[Ex: 15 lojas]</span>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100 md:col-span-2 lg:col-span-1">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Descrição da Operação</span>
+                        <p contenteditable="true" class="text-sm text-slate-600">[Breve resumo sobre a marca e o modelo de atendimento]</p>
+                    </div>
+                  </div>
+              </div>
+            </section>
+
+            <!-- Ecossistema de Módulos -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-4">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-5 h-5 text-blue-600"></i>
+                    📦 Ecossistema de Módulos e Sistemas
+                  </h2>
+              </div>
+              <div class="overflow-x-auto">
+                  <table id="tabela-ecossistema-modulos" class="w-full text-left border-collapse">
+                  <thead>
+                      <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase border-b border-slate-200">
+                        <th class="px-6 py-3">Módulo / Sistema</th>
+                        <th class="px-6 py-3 text-center">Status</th>
+                        <th class="px-6 py-3">Versão / Configuração Padrão</th>
+                        <th class="px-6 py-3">Observações</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 text-sm">
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Taste One PDV Windows</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">V2.4.1</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Padrão nos caixas principais</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Taste One PDV Android</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-400">-</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-400">-</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Taste One PDV Tablet</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">V1.8.0</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Atendimento em mesa</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Taste One PDV Smart POS</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Sunmi L400</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Vendas externas/fila</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">PIX Integrado Smart POS</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Banco X</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Chave centralizada na matriz</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Degust One Retaguarda</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Web</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Acesso Franqueadora / Franqueados</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Autoatendimento One</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Totem 21"</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Windows/Android</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">KDS (Cozinha)</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Telas Touch 15"</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Módulo de Produção</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Painel de Senhas</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">TV 43"</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Módulo Exibição</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Hub Delivery</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Integrado: iFood/Rappi</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Produção Automática</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">TEF / Adquirente</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">TEF House</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Adquirente Padrão: Stone</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">QR Linx</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatus(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">SIM</span>
+                        </td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Emissão NFC-e/SAT</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-500">Emissão automática</td>
+                      </tr>
+                  </tbody>
+                  </table>
+              </div>
+            </section>
+
+            <!-- Alert Box / Pontos Críticos -->
+            <section class="bg-amber-50 border border-amber-200 rounded-xl p-6">
+              <div class="flex items-center gap-2 mb-4 text-amber-900 font-bold text-base">
+                  <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i>
+                  ⚠️ Pontos Críticos e Alertas de Suporte
+              </div>
+              <p class="text-xs font-bold uppercase text-amber-800 mb-3 tracking-wider">Atenção antes da instalação:</p>
+              <ol id="lista-pontos-criticos" class="list-decimal list-inside space-y-2 text-sm text-amber-900">
+                  <li contenteditable="true">
+                    <strong class="font-semibold">Usuário Gerente:</strong> Criar SEMPRE o usuário Gerente na Retaguarda <em>antes</em> de iniciar a instalação do PDV local para evitar inconsistência de sincronia.
+                  </li>
+                  <li contenteditable="true">
+                    <strong class="font-semibold">MID-e / Fiscal:</strong> Teste fiscal obrigatório de NFC-e + Cancelamento antes de liberar a loja para operação.
+                  </li>
+                  <li contenteditable="true">
+                    <strong class="font-semibold">Troca de Preço:</strong> Alterações de preço são centralizadas na Franqueadora (Franqueados não possuem permissão de edição local).
+                  </li>
+              </ol>
+            </section>
+
+            <!-- Flow & Infra Split -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <!-- Jornada de Venda -->
+              <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
+                  <div>
+                    <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2 mb-4">
+                        <i data-lucide="refresh-cw" class="w-5 h-5 text-blue-600"></i>
+                        🔄 Jornada de Venda e Fluxo
+                    </h2>
+
+                    <!-- Flow Diagram Box -->
+                    <div class="mb-6">
+                        <label for="fluxo-venda" class="block mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Fluxo da Jornada de Venda
+                        </label>
+                        <textarea
+                          id="fluxo-venda"
+                          rows="6"
+                          class="w-full bg-slate-900 text-slate-200 p-4 rounded-lg font-mono text-xs border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block leading-relaxed resize-y shadow-inner"
+                          placeholder="Digite ou ajuste o fluxo da venda aqui..."
+                        >[ Cliente ] 
+    │
+    ├──> [ Totem / PDV ] ──> (Pagamento TEF/PIX) ──> [ Impressão / KDS ]
+    │                                                       │
+    └──> [ Hub Delivery ] ──> (Aceite Auto) ─────────> [ Expedição ]</textarea>
+                    </div>
+                  </div>
+
+                  <ul class="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-4">
+                    <li class="flex items-center gap-2">
+                        <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
+                        <span contenteditable="true"><strong>Horário Padrão:</strong> 10h00 às 22h00</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+                        <span contenteditable="true"><strong>Usuários no PDV:</strong> Login individual (CPF/Código)</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <i data-lucide="repeat" class="w-4 h-4 text-slate-400"></i>
+                        <span contenteditable="true"><strong>Turnos:</strong> 2 turnos (Abertura / Fechamento)</span>
+                    </li>
+                  </ul>
+              </section>
+
+              <!-- Dados Técnicos -->
+              <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2 mb-4">
+                    <i data-lucide="lock" class="w-5 h-5 text-blue-600"></i>
+                    🔐 Dados Técnicos e Acessos Globais
+                  </h2>
+                  <p class="text-xs text-slate-500 italic mb-4">Informações restritas para a equipe de Implantação e Suporte.</p>
+
+                  <div id="lista-dados-tecnicos" class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <span class="text-slate-600 font-medium">Usuário / Login Windows:</span>
+                        <code contenteditable="true" class="bg-slate-200 px-2 py-0.5 rounded text-xs text-slate-800">Atendimento / Marca123*</code>
+                    </div>
+                    <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <span class="text-slate-600 font-medium">Senha Gerente (PDV):</span>
+                        <code contenteditable="true" class="bg-slate-200 px-2 py-0.5 rounded text-xs text-slate-800">9988</code>
+                    </div>
+                    <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <span class="text-slate-600 font-medium">Portal MID-e Login:</span>
+                        <code contenteditable="true" class="bg-slate-200 px-2 py-0.5 rounded text-xs text-slate-800">admin@franquiamarca.com.br</code>
+                    </div>
+                    <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <span class="text-slate-600 font-medium">Antivírus Padrão:</span>
+                        <span contenteditable="true" class="text-slate-800 text-xs font-semibold">Windows Defender / SentinelOne</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <span class="text-slate-600 font-medium">Acesso Remoto:</span>
+                        <code contenteditable="true" class="bg-slate-200 px-2 py-0.5 rounded text-xs text-slate-800">MARCA_PROD</code>
+                    </div>
+                  </div>
+              </section>
+            </div>
+
+            <!-- Infraestrutura e Hardware Padrão -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-4">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5 text-blue-600"></i>
+                    🛠️ Infraestrutura e Hardware Padrão
+                  </h2>
+              </div>
+              <div class="overflow-x-auto">
+                  <table id="tabela-hardware-padrao" class="w-full text-left border-collapse">
+                  <thead>
+                      <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase border-b border-slate-200">
+                        <th class="px-6 py-3">Equipamento</th>
+                        <th class="px-6 py-3">Especificação Padrão</th>
+                        <th class="px-6 py-3">Impressora / Periférico Vinculado</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 text-sm">
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Computador PDV</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Intel i5 7ª Gen, 8GB RAM, SSD 240GB, Win 11</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Impressora Térmica Epson TM88V (USB)</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Totem Autoatendimento</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">SUNMI K2S</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Impressora Embutida + Pinpad Gertec PP930</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">KDS</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Monitor Touch Industrial 15"</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-400">Sem impressão</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Pinpad / TEF</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Gertec PP930 (USB/Serial)</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-400">-</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Balança</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Toledo Prix 3</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Conexão USB Serial com PDV</td>
+                      </tr>
+                  </tbody>
+                  </table>
+              </div>
+            </section>
+
+            <!-- Regras de Negócio e Permissões -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-4">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-5 h-5 text-blue-600"></i>
+                    ⚙️ Regras de Negócio e Permissões
+                  </h2>
+              </div>
+              <div class="overflow-x-auto">
+                  <table id="tabela-regras-negocio" class="w-full text-left border-collapse">
+                  <thead>
+                      <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase border-b border-slate-200">
+                        <th class="px-6 py-3">Tabela / Configuração</th>
+                        <th class="px-6 py-3">Responsável por Alterar</th>
+                        <th class="px-6 py-3">Detalhamento / Regra</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 text-sm">
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Tabela de Preço</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-700 font-medium">Franqueadora</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Tabela única para todas as lojas, atualizada mensalmente</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Tabela de Alíquotas</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-700 font-medium">Franqueadora / Contabilidade</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Atualizada mensalmente</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Descontos no PDV</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-700 font-medium">Limitado</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Máximo 10% mediante senha de Gerente</td>
+                      </tr>
+                      <tr class="hover:bg-slate-50/50">
+                        <td contenteditable="true" class="px-6 py-3.5 font-semibold text-slate-900">Insumos / Opcionais</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-700 font-medium">Franqueadora</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-slate-600">Padrão de receitas travado na matriz</td>
+                      </tr>
+                  </tbody>
+                  </table>
+              </div>
+            </section>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: NÍVEL 2 - EXCEÇÕES E ROLLOUT        -->
+        <!-- ========================================== -->
+        <div id="content-nivel2" class="tab-content hidden space-y-8">
+            <!-- Banner / Alert Info -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-blue-900 flex items-start gap-3">
+              <i data-lucide="info" class="w-5 h-5 text-blue-600 mt-0.5 shrink-0"></i>
+              <div class="text-sm" contenteditable="true">
+                  <strong class="font-semibold">Instruções:</strong> Utilize este
+                  documento para registrar APENAS as lojas que possuem
+                  especificidades, divergências de hardware ou regras particulares em
+                  relação ao Padrão da Marca (Nível 1). Lojas 100% padrão não precisam
+                  de detalhamento extra.
+              </div>
+            </div>
+
+            <!-- Resumo de Rollout Cards -->
+            <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <!-- TOTAL DE LOJAS (Editável Manualmente - VALOR PADRÃO DEFINIDO COMO 1) -->
+              <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                  <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Total de Lojas</span>
+                  <span
+                    id="card-total"
+                    contenteditable="true"
+                    oninput="recalcularContadores()"
+                    class="text-3xl font-bold text-slate-800 mt-1 block"
+                  >1</span>
+              </div>
+
+              <!-- LOJAS NO PADRÃO (Calculado: Total - Com Exceções) -->
+              <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                  <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Lojas no Padrão</span>
+                  <span id="card-padrao" class="text-3xl font-bold text-emerald-600 mt-1 block">1</span>
+              </div>
+
+              <!-- COM EXCEÇÕES (Calculado Automaticamente pelo total de cards/linhas com exceção) -->
+              <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                  <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Com Exceções</span>
+                  <span id="card-excecoes" class="text-3xl font-bold text-amber-600 mt-1 block">0</span>
+              </div>
+
+              <!-- EM IMPLANTAÇÃO (Editável Manualmente) -->
+              <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-center">
+                  <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Em Implantação</span>
+                  <span id="card-implantacao" contenteditable="true" class="text-3xl font-bold text-blue-600 mt-1 block">1</span>
+              </div>
+            </section>
+
+            <!-- Tabela Quick-View -->
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-4 flex justify-between items-center">
+                  <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="table" class="w-5 h-5 text-blue-600"></i>
+                    📌 Tabela Quick-View de Lojas Ativas
+                  </h2>
+                  <button
+                    onclick="adicionarLinhaTabela()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-sm transition-colors flex items-center gap-1.5"
+                  >
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Adicionar Loja</span>
+                  </button>
+              </div>
+              <div class="overflow-x-auto">
+                  <table class="w-full text-left border-collapse" id="tabela-quickview">
+                  <thead>
+                      <tr class="bg-slate-50 text-slate-500 text-xs font-semibold uppercase border-b border-slate-200">
+                        <th class="px-6 py-3">Código</th>
+                        <th class="px-6 py-3">Nome da Loja</th>
+                        <th class="px-6 py-3 text-center">UF</th>
+                        <th class="px-6 py-3 text-center">Status</th>
+                        <th class="px-6 py-3 text-center">Tem Exceção?</th>
+                        <th class="px-6 py-3 text-right">Ações</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 text-sm">
+                      <!-- Loja Exemplo L001 -->
+                      <tr class="hover:bg-slate-50/50" id="linha-loja-l001">
+                        <td contenteditable="true" class="px-6 py-3.5 font-bold text-slate-800">01</td>
+                        <td contenteditable="true" class="px-6 py-3.5 font-medium text-slate-900">Loja Exemplo</td>
+                        <td contenteditable="true" class="px-6 py-3.5 text-center text-slate-600">SP</td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatusOperacional(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none">OPERACIONAL</span>
+                        </td>
+                        <td class="px-6 py-3.5 text-center">
+                          <span onclick="alterarStatusExcecao(this, 'loja-l001')" class="bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none">NÃO</span>
+                        </td>
+                        <td class="px-6 py-3.5 text-right flex items-center justify-end gap-2">
+                          <a href="#loja-l001" class="text-blue-600 hover:text-blue-800 font-medium text-xs underline inline-flex items-center gap-1">
+                            Ver Exceção <i data-lucide="arrow-down" class="w-3 h-3"></i>
+                          </a>
+                          <button onclick="removerLinhaTabela('linha-loja-l001', 'loja-l001')" class="text-slate-400 hover:text-red-600 transition-colors p-1" title="Excluir Loja">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                          </button>
+                        </td>
+                      </tr>
+                  </tbody>
+                  </table>
+              </div>
+            </section>
+
+            <!-- Registro Detalhado de Exceções -->
+            <section class="space-y-6">
+              <div class="flex justify-between items-center border-b border-slate-200 pb-3">
+                  <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-5 h-5 text-amber-500"></i>
+                    🎯 Registro Detalhado de Exceções
+                  </h2>
+                  <button onclick="adicionarNovaExcecao()" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    Adicionar Nova Exceção
+                  </button>
+              </div>
+
+              <!-- Container dos Cards de Exceção -->
+              <div id="container-excecoes" class="space-y-6">
+                  <!-- Cards de exceção ficam aqui -->
+              </div>
+            </section>
+        </div>
+        </main>
+     </div>
+
+    <!-- NOTIFICAÇÃO TOAST -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl hidden flex items-center gap-3 z-50">
+      <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+      <div>
+        <p id="toast-titulo" class="font-bold text-sm">HTML Copiado com Sucesso!</p>
+        <p id="toast-subtitulo" class="text-xs text-slate-300">Cole o código diretamente dentro do Jira.</p>
+      </div>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+      // Initialize Lucide Icons
+      lucide.createIcons();
+
+      // Função para alterar cor de status
+      function alterarStatus(elemento) {
+        const statusAtual = elemento.textContent.trim().toUpperCase();
+        let novoStatus = "";
+        let novaClasse = "";
+
+        switch (statusAtual) {
+          case "SIM":
+            novoStatus = "NÃO";
+            novaClasse = "bg-slate-100 text-slate-600";
+            break;
+          case "NÃO":
+            novoStatus = "SIM";
+            novaClasse = "bg-emerald-100 text-emerald-800";
+            break;
+          default:
+            novoStatus = "SIM";
+            novaClasse = "bg-emerald-100 text-emerald-800";
+        }
+
+        elemento.textContent = novoStatus;
+        elemento.className = `text-xs font-semibold px-2.5 py-0.5 rounded ${novaClasse}`;
+      }
+
+      // Tab Switcher Logic
+      function switchTab(tabId) {
+        document.querySelectorAll(".tab-content").forEach((content) => {
+          content.classList.add("hidden");
+        });
+
+        document.querySelectorAll(".tab-button").forEach((btn) => {
+          btn.classList.remove("tab-active");
+          btn.classList.add("text-slate-500");
+        });
+
+        document.getElementById(`content-${tabId}`).classList.remove("hidden");
+
+        const activeBtn = document.getElementById(`tab-${tabId}`);
+        activeBtn.classList.add("tab-active");
+        activeBtn.classList.remove("text-slate-500");
+
+        fecharSidebarMobile();
+      }
+
+      // Função para extrair o HTML totalmente limpo e pronto para o Jira
+      function obterHTMLTratado() {
+        // Mesma cautela de obterEstadoGeralJSON(): sincronizar as textareas
+        // não deve ser tratado como uma edição do usuário pelo observador de
+        // auto-save (evita disparar um save desnecessário a cada exportação).
+        executarSemObservarAlteracoes(() => {
+          document.querySelectorAll("textarea").forEach((textarea) => {
+            textarea.textContent = textarea.value;
+          });
+        });
+
+        const cloneDoc = document.documentElement.cloneNode(true);
+
+        cloneDoc.querySelectorAll(".tab-content").forEach((tab) => {
+          tab.classList.remove("hidden");
+        });
+
+        const sidebar = cloneDoc.querySelector("#default-sidebar");
+        if (sidebar) sidebar.remove();
+        const overlay = cloneDoc.querySelector("#sidebar-overlay");
+        if (overlay) overlay.remove();
+        const botaoMenuMobile = cloneDoc.querySelector('button[onclick="toggleSidebar()"]');
+        if (botaoMenuMobile) botaoMenuMobile.remove();
+
+        cloneDoc.querySelectorAll("[contenteditable]").forEach((el) => {
+          el.removeAttribute("contenteditable");
+        });
+
+        const toast = cloneDoc.querySelector("#toast");
+        if (toast) toast.remove();
+        const indicadorSalvo = cloneDoc.querySelector("#indicador-salvo");
+        if (indicadorSalvo) indicadorSalvo.remove();
+
+        // Remove todos os <script> (CDNs externos do Tailwind/Lucide e a lógica
+        // inteira da aplicação): não fazem sentido fora do Apps Script e só
+        // poluem/quebram o conteúdo ao colar no Jira/Confluence.
+        cloneDoc.querySelectorAll("script").forEach((script) => script.remove());
+
+        // Remove atributos de interatividade que ficam "mortos" sem os scripts
+        // acima (onclick/oninput/onchange não têm mais nenhum efeito).
+        const atributosParaRemover = ["onclick", "oninput", "onchange"];
+        cloneDoc.querySelectorAll("*").forEach((el) => {
+          atributosParaRemover.forEach((attr) => el.removeAttribute(attr));
+        });
+
+        return "<!DOCTYPE html>\n" + cloneDoc.outerHTML;
+      }
+
+      // Copia o HTML limpo para a Área de Transferência
+      function copiarHTMLJira() {
+        const htmlLimpo = obterHTMLTratado();
+
+        navigator.clipboard
+          .writeText(htmlLimpo)
+          .then(() => {
+            mostrarToast("HTML Copiado com Sucesso!", "Cole o código diretamente dentro do Jira.");
+          })
+          .catch((err) => {
+            alert("Erro ao copiar HTML: " + err);
+          });
+      }
+
+      // Baixa o HTML modificado como arquivo
+      function baixarHTML() {
+        const htmlLimpo = obterHTMLTratado();
+        const blob = new Blob([htmlLimpo], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "mapeamento_de_marcas_editado.html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // --- Exportação para Wiki Markup (Confluence) -----------------------
+      // Gera, a partir dos dados atuais do Nível 1, um texto pronto para ser
+      // colado dentro da macro "Markup" do Confluence (aceita a sintaxe
+      // clássica de wiki markup: {panel}, {status}, {warning}, {note},
+      // {expand}, {code}, tabelas "||cabeçalho||" etc.). O editor novo do
+      // Confluence não converte esse texto automaticamente se colado direto
+      // no corpo da página — é necessário inserir a macro "Markup" e colar
+      // o conteúdo dentro dela.
+
+      // Escapa caracteres que têm significado especial no wiki markup do
+      // Confluence ({, }, [, ]) para que textos livres digitados pelo
+      // analista não quebrem a macro gerada.
+      function escaparWikiMarkup(texto) {
+        return (texto || "").replace(/([{}[\]])/g, "\\$1");
+      }
+
+      // Extrai o texto de um elemento pelo id, com fallback para um valor
+      // padrão caso o elemento não exista ou ainda esteja com o placeholder
+      // original (ex.: "[Nome da Marca]").
+      function obterTextoCampo(id, valorPadrao = "") {
+        const el = document.getElementById(id);
+        if (!el) return valorPadrao;
+        const texto = el.textContent.trim();
+        if (!texto || texto.startsWith("[")) return valorPadrao;
+        return texto;
+      }
+
+      // Resolve a cor do macro {status} a partir do texto do badge original.
+      // resolverCorStatus é o mapeamento padrão (usado no Ecossistema de
+      // Módulos e no Status Operacional). resolverCorExcecao é usado apenas
+      // na coluna "Tem Exceção?" da Tabela Quick-View, onde "SIM" deve
+      // continuar amarelo/alerta (como no badge original), não verde.
+      function resolverCorStatus(status) {
+        const cores = {
+          SIM: "Green",
+          NÃO: "Grey",
+          OPERACIONAL: "Green",
+          "EM IMPLANTAÇÃO": "Blue",
+        };
+        return cores[status] || "Grey";
+      }
+
+      function resolverCorExcecao(status) {
+        return status === "SIM" ? "Yellow" : "Grey";
+      }
+
+      // Converte uma tabela HTML (thead/tbody) em uma tabela de wiki markup
+      // (||cabeçalho||...|| / |célula|...|).
+      // - colunasStatus: mapa { indiceDaColuna: resolverDeCor } — cada índice
+      //   (base 0) marcado aqui tem seu texto convertido em {status:colour=...}
+      //   usando o resolvedor de cor informado (padrão: resolverCorStatus).
+      // - colunasIgnorar: índices (base 0) de colunas que não fazem sentido no
+      //   texto exportado (ex.: coluna "Ações" com botões/links) e são omitidas.
+      function tabelaParaWikiMarkup(tabela, { colunasStatus = {}, colunasIgnorar = [] } = {}) {
+        if (!tabela) return "";
+
+        const linhas = [];
+
+        const cabecalhosTh = Array.from(tabela.querySelectorAll("thead th"));
+        const cabecalhos = cabecalhosTh
+          .map((th, indice) => ({ indice, texto: escaparWikiMarkup(th.textContent.trim()) }))
+          .filter(({ indice }) => !colunasIgnorar.includes(indice));
+        if (cabecalhos.length) {
+          linhas.push("||" + cabecalhos.map((c) => c.texto).join("||") + "||");
+        }
+
+        tabela.querySelectorAll("tbody tr").forEach((tr) => {
+          const celulas = Array.from(tr.children)
+            .map((td, indice) => {
+              if (colunasIgnorar.includes(indice)) return null;
+              const texto = td.textContent.trim();
+              if (Object.prototype.hasOwnProperty.call(colunasStatus, indice)) {
+                const status = texto.toUpperCase();
+                const resolverCor = colunasStatus[indice] || resolverCorStatus;
+                return `{status:colour=${resolverCor(status)}|title=${escaparWikiMarkup(status)}}`;
+              }
+              return escaparWikiMarkup(texto);
+            })
+            .filter((celula) => celula !== null);
+          linhas.push("|" + celulas.join("|") + "|");
+        });
+
+        return linhas.join("\n");
+      }
+
+      // Converte uma lista <ol>/<ul> em itens numerados/marcadores de wiki markup.
+      function listaParaWikiMarkup(lista, marcador = "#") {
+        if (!lista) return "";
+        return Array.from(lista.children)
+          .map((li) => `${marcador} ${escaparWikiMarkup(li.textContent.trim())}`)
+          .join("\n");
+      }
+
+      // Converte a lista de "Dados Técnicos e Acessos Globais" (divs em
+      // formato rótulo/valor, não uma <table>) em uma tabela de wiki markup.
+      function listaRotuloValorParaWikiMarkup(container) {
+        if (!container) return "";
+
+        const linhas = ["||Item||Valor||"];
+        Array.from(container.children).forEach((linha) => {
+          const [rotuloEl, valorEl] = linha.children;
+          if (!rotuloEl || !valorEl) return;
+          const rotulo = rotuloEl.textContent.trim().replace(/:$/, "");
+          const valor = valorEl.textContent.trim();
+          linhas.push(`|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`);
+        });
+
+        return linhas.join("\n");
+      }
+
+      // Monta o texto completo em Wiki Markup do Nível 1 (Padrão da Marca).
+      function gerarWikiMarkupNivel1() {
+        const nomeMarca = obterTextoCampo("campo-nome-marca-projeto", "Marca não informada");
+        const dataGeracao = new Date().toLocaleString("pt-BR");
+
+        const instrucoes = document.querySelector("#content-nivel1 .bg-blue-50 [contenteditable]");
+        // Remove o prefixo "Instruções:" do corpo do texto, já que o título
+        // do próprio painel ({panel:title=ℹ️ Instruções}) já o exibe.
+        const textoInstrucoes = instrucoes
+          ? instrucoes.textContent.trim().replace(/\s+/g, " ").replace(/^Instruções:\s*/i, "")
+          : "";
+
+        const tabelaModulos = tabelaParaWikiMarkup(document.getElementById("tabela-ecossistema-modulos"), { colunasStatus: { 1: resolverCorStatus } });
+        const listaPontosCriticos = listaParaWikiMarkup(document.getElementById("lista-pontos-criticos"));
+        const tabelaDadosTecnicos = listaRotuloValorParaWikiMarkup(document.getElementById("lista-dados-tecnicos"));
+        const tabelaHardware = tabelaParaWikiMarkup(document.getElementById("tabela-hardware-padrao"));
+        const tabelaRegras = tabelaParaWikiMarkup(document.getElementById("tabela-regras-negocio"));
+
+        return [
+          `h1. 📌 Mapeamento de Marca — Nível 1: Padrão da Marca`,
+          ``,
+          `*Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
+          `_Documento gerado em ${dataGeracao}_`,
+          ``,
+          `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
+          textoInstrucoes || "Este documento define as configurações padrão da rede.",
+          `{panel}`,
+          ``,
+          `h2. 📦 Ecossistema de Módulos e Sistemas`,
+          ``,
+          tabelaModulos,
+          ``,
+          `h2. ⚠️ Pontos Críticos e Alertas de Suporte`,
+          ``,
+          `{warning:title=ATENÇÃO ANTES DA INSTALAÇÃO}`,
+          listaPontosCriticos,
+          `{warning}`,
+          ``,
+          `h2. 🔒 Dados Técnicos e Acessos Globais`,
+          ``,
+          `{note:title=Informações restritas à equipe de Implantação e Suporte}`,
+          tabelaDadosTecnicos,
+          `{note}`,
+          ``,
+          `h2. 🛠️ Infraestrutura e Hardware Padrão`,
+          ``,
+          `{expand:title=Ver especificações completas de hardware}`,
+          tabelaHardware,
+          `{expand}`,
+          ``,
+          `h2. ⚙️ Regras de Negócio e Permissões`,
+          ``,
+          tabelaRegras,
+          ``,
+          `----`,
+          `_Documento gerado automaticamente por TOTVS LINX - Map Generator_`,
+        ].join("\n");
+      }
+
+      // Copia o Wiki Markup do Nível 1 para a Área de Transferência.
+      function copiarWikiMarkupNivel1() {
+        // Mesma cautela das demais exportações: sincronizar textareas sem
+        // disparar o observador de auto-save.
+        executarSemObservarAlteracoes(() => {
+          document.querySelectorAll("textarea").forEach((textarea) => {
+            textarea.textContent = textarea.value;
+          });
+        });
+
+        const wikiMarkup = gerarWikiMarkupNivel1();
+
+        navigator.clipboard
+          .writeText(wikiMarkup)
+          .then(() => {
+            mostrarToast(
+              "Wiki Markup Copiado!",
+              'Cole dentro da macro "Markup" do Confluence (menu +/Inserir → Markup).'
+            );
+          })
+          .catch((err) => {
+            alert("Erro ao copiar Wiki Markup: " + err);
+          });
+      }
+
+      // Converte um card de exceção (criado por criarCardExcecao()) em um
+      // bloco de wiki markup: título com código/nome, painel com status +
+      // metadados, e lista de divergências mapeadas.
+      function cardExcecaoParaWikiMarkup(card) {
+        const codigoEl = card.querySelector(".text-xs.font-bold.text-blue-600");
+        const nomeEl = card.querySelector("h3");
+        const statusEl = card.querySelector('span[onclick^="alterarStatusOperacional"]');
+
+        const codigo = codigoEl ? codigoEl.textContent.trim() : "";
+        const nome = nomeEl ? nomeEl.textContent.trim() : "Loja sem nome";
+        const status = statusEl ? statusEl.textContent.trim().toUpperCase() : "";
+
+        // Os 3 metadados (Razão, Data, Analista) ficam em divs dentro do grid
+        // "bg-slate-50": cada um tem um <strong> como rótulo e um <span>/valor
+        // logo em seguida.
+        const metadados = [];
+        card.querySelectorAll(".bg-slate-50 > div").forEach((bloco) => {
+          const rotuloEl = bloco.querySelector("strong");
+          const valorEl = bloco.querySelector("span");
+          if (!rotuloEl) return;
+          const rotulo = rotuloEl.textContent.trim().replace(/:$/, "");
+          const valor = valorEl ? valorEl.textContent.trim() : "";
+          metadados.push(`|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`);
+        });
+
+        const itensDivergencia = Array.from(card.querySelectorAll("li")).map(
+          (li) => `* ${escaparWikiMarkup(li.textContent.trim())}`
+        );
+
+        return [
+          `h3. ${escaparWikiMarkup(codigo)} — ${escaparWikiMarkup(nome)}`,
+          ``,
+          `{panel:title=Status: ${escaparWikiMarkup(status)}}`,
+          `||Campo||Valor||`,
+          ...metadados,
+          `{panel}`,
+          ``,
+          `*Divergências Mapeadas:*`,
+          ...(itensDivergencia.length ? itensDivergencia : ["* Nenhuma divergência detalhada."]),
+        ].join("\n");
+      }
+
+      // Monta o texto completo em Wiki Markup do Nível 2 (Exceções e Rollout).
+      function gerarWikiMarkupNivel2() {
+        const nomeMarca = obterTextoCampo("campo-nome-marca-projeto", "Marca não informada");
+        const dataGeracao = new Date().toLocaleString("pt-BR");
+
+        const instrucoes = document.querySelector("#content-nivel2 .bg-blue-50 [contenteditable]");
+        const textoInstrucoes = instrucoes
+          ? instrucoes.textContent.trim().replace(/\s+/g, " ").replace(/^Instruções:\s*/i, "")
+          : "";
+
+        const totalLojas = document.getElementById("card-total")?.textContent.trim() || "0";
+        const lojasPadrao = document.getElementById("card-padrao")?.textContent.trim() || "0";
+        const comExcecoes = document.getElementById("card-excecoes")?.textContent.trim() || "0";
+        const emImplantacao = document.getElementById("card-implantacao")?.textContent.trim() || "0";
+
+        const tabelaResumo = [
+          `||Total de Lojas||Lojas no Padrão||Com Exceções||Em Implantação||`,
+          `|*${totalLojas}*|{status:colour=Green|title=${lojasPadrao}}|{status:colour=Yellow|title=${comExcecoes}}|{status:colour=Blue|title=${emImplantacao}}|`,
+        ].join("\n");
+
+        const tabelaQuickView = tabelaParaWikiMarkup(document.getElementById("tabela-quickview"), {
+          colunasStatus: { 3: resolverCorStatus, 4: resolverCorExcecao },
+          colunasIgnorar: [5],
+        });
+
+        const cards = Array.from(document.querySelectorAll("#container-excecoes > div"));
+        const excecoesWikiMarkup = cards.length
+          ? cards.map(cardExcecaoParaWikiMarkup).join("\n\n")
+          : "_Nenhuma exceção registrada até o momento._";
+
+        return [
+          `h1. 📌 Mapeamento de Marca — Nível 2: Exceções e Rollout`,
+          ``,
+          `*Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
+          `_Documento gerado em ${dataGeracao}_`,
+          ``,
+          `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
+          textoInstrucoes || "Utilize este documento para registrar apenas as lojas com divergências em relação ao Padrão da Marca (Nível 1).",
+          `{panel}`,
+          ``,
+          `h2. 📊 Resumo de Rollout`,
+          ``,
+          tabelaResumo,
+          ``,
+          `h2. 📌 Tabela Quick-View de Lojas Ativas`,
+          ``,
+          tabelaQuickView,
+          ``,
+          `h2. 🎯 Registro Detalhado de Exceções`,
+          ``,
+          excecoesWikiMarkup,
+          ``,
+          `----`,
+          `_Documento gerado automaticamente por TOTVS LINX - Map Generator_`,
+        ].join("\n");
+      }
+
+      // Copia o Wiki Markup do Nível 2 para a Área de Transferência.
+      function copiarWikiMarkupNivel2() {
+        executarSemObservarAlteracoes(() => {
+          document.querySelectorAll("textarea").forEach((textarea) => {
+            textarea.textContent = textarea.value;
+          });
+        });
+
+        const wikiMarkup = gerarWikiMarkupNivel2();
+
+        navigator.clipboard
+          .writeText(wikiMarkup)
+          .then(() => {
+            mostrarToast(
+              "Wiki Markup Copiado!",
+              'Cole dentro da macro "Markup" do Confluence (menu +/Inserir → Markup).'
+            );
+          })
+          .catch((err) => {
+            alert("Erro ao copiar Wiki Markup: " + err);
+          });
+      }
+
+      function mostrarToast(titulo = "HTML Copiado com Sucesso!", subtitulo = "Cole o código diretamente dentro do Jira.") {
+        const toast = document.getElementById("toast");
+        const tituloEl = document.getElementById("toast-titulo");
+        const subtituloEl = document.getElementById("toast-subtitulo");
+        if (tituloEl) tituloEl.textContent = titulo;
+        if (subtituloEl) subtituloEl.textContent = subtitulo;
+        toast.classList.remove("hidden");
+        setTimeout(() => {
+          toast.classList.add("hidden");
+        }, 3000);
+      }
+
+      // Recalcula todos os cards de resumo dinamicamente
+      function recalcularContadores() {
+        const containerExcecoes = document.getElementById("container-excecoes");
+        const qtdExcecoes = containerExcecoes ? containerExcecoes.children.length : 0;
+
+        const elTotal = document.getElementById("card-total");
+        const totalLojas = elTotal ? (parseInt(elTotal.innerText.trim()) || 0) : 0;
+
+        const elExcecoes = document.getElementById("card-excecoes");
+        if (elExcecoes) elExcecoes.innerText = qtdExcecoes;
+
+        const elPadrao = document.getElementById("card-padrao");
+        if (elPadrao) {
+          const lojasPadrao = Math.max(0, totalLojas - qtdExcecoes);
+          elPadrao.innerText = lojasPadrao;
+        }
+      }
+
+      // Calcula o próximo código de loja disponível a partir do MAIOR código já
+      // usado na tabela (não da contagem de linhas), evitando reaproveitar um
+      // código/ID já removido. Também garante que o ID resultante ainda não
+      // exista no documento, incrementando até encontrar um livre.
+      function obterProximoCodigoLoja() {
+        const tbody = document.querySelector("#tabela-quickview tbody");
+        let maiorNumero = 0;
+
+        if (tbody) {
+          tbody.querySelectorAll("tr").forEach((tr) => {
+            const codigoTexto = tr.cells[0] ? tr.cells[0].textContent.trim() : "";
+            const match = codigoTexto.match(/(\d+)/);
+            if (match) {
+              maiorNumero = Math.max(maiorNumero, parseInt(match[1], 10));
+            }
+          });
+        }
+
+        let numero = maiorNumero + 1;
+        let codigo = `L${String(numero).padStart(3, "0")}`;
+        let elementId = `loja-${codigo.toLowerCase()}`;
+
+        while (document.getElementById(elementId) || document.getElementById(`linha-${elementId}`)) {
+          numero++;
+          codigo = `L${String(numero).padStart(3, "0")}`;
+          elementId = `loja-${codigo.toLowerCase()}`;
+        }
+
+        return { codigo, elementId };
+      }
+
+      // Cria a linha na Tabela Quick-View e, opcionalmente, o card de exceção
+      // detalhado correspondente. Função única usada tanto por
+      // "Adicionar Loja" quanto por "Adicionar Nova Exceção", evitando a
+      // duplicação de HTML que existia entre as duas antes.
+      function criarLojaCompleta(codigo, elementId, nomeLoja, comExcecao) {
+        const tbody = document.querySelector("#tabela-quickview tbody");
+        const linhaId = `linha-${elementId}`;
+
+        const statusExcecaoTexto = comExcecao ? "SIM" : "NÃO";
+        const statusExcecaoClasse = comExcecao
+          ? "bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer select-none"
+          : "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50/50";
+        tr.id = linhaId;
+        tr.innerHTML = `
+          <td contenteditable="true" class="px-6 py-3.5 font-bold text-slate-800">${codigo}</td>
+          <td contenteditable="true" class="px-6 py-3.5 font-medium text-slate-900">${nomeLoja}</td>
+          <td contenteditable="true" class="px-6 py-3.5 text-center text-slate-600">UF</td>
+          <td class="px-6 py-3.5 text-center">
+            <span onclick="alterarStatusOperacional(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none">OPERACIONAL</span>
+          </td>
+          <td class="px-6 py-3.5 text-center">
+            <span onclick="alterarStatusExcecao(this, '${elementId}')" class="${statusExcecaoClasse}">${statusExcecaoTexto}</span>
+          </td>
+          <td class="px-6 py-3.5 text-right flex items-center justify-end gap-2">
+            <a href="#${elementId}" class="text-blue-600 hover:text-blue-800 font-medium text-xs underline inline-flex items-center gap-1">
+              Ver Exceção <i data-lucide="arrow-down" class="w-3 h-3"></i>
+            </a>
+            <button onclick="removerLinhaTabela('${linhaId}', '${elementId}')" class="text-slate-400 hover:text-red-600 transition-colors p-1" title="Excluir Loja">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        lucide.createIcons();
+
+        if (comExcecao) {
+          criarCardExcecao(elementId, codigo, nomeLoja);
+        } else {
+          recalcularContadores();
+        }
+      }
+
+      // Adiciona uma nova loja já com o registro de exceção detalhado aberto
+      function adicionarNovaExcecao() {
+        const { codigo, elementId } = obterProximoCodigoLoja();
+        criarLojaCompleta(codigo, elementId, "Nova Loja Exemplo", true);
+      }
+
+      // Alterna status de Operacional / Em Implantação
+      function alterarStatusOperacional(el) {
+        const status = el.textContent.trim().toUpperCase();
+        if (status === "OPERACIONAL") {
+          el.textContent = "EM IMPLANTAÇÃO";
+          el.className = "bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none";
+        } else {
+          el.textContent = "OPERACIONAL";
+          el.className = "bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none";
+        }
+      }
+
+      // Alterna o status "Tem Exceção?" entre SIM e NÃO na tabela
+      function alterarStatusExcecao(el, targetCardId) {
+        const status = el.textContent.trim().toUpperCase();
+        if (status === "SIM") {
+          // Pergunta ANTES de alterar a UI: se o usuário cancelar, nada muda
+          // (evita badge "NÃO" com o card de exceção ainda existente).
+          if (!confirm("Deseja remover o registro detalhado dessa exceção?")) {
+            return;
+          }
+
+          el.textContent = "NÃO";
+          el.className = "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+
+          const card = document.getElementById(targetCardId);
+          if (card) {
+            card.remove();
+            recalcularContadores();
+          }
+        } else {
+          el.textContent = "SIM";
+          el.className = "bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer select-none";
+
+          if (!document.getElementById(targetCardId)) {
+            const codigo = targetCardId.replace("loja-", "").toUpperCase();
+            criarCardExcecao(targetCardId, codigo, "Nova Loja Exceção");
+          }
+        }
+      }
+
+      // Adiciona uma nova linha na Tabela Quick-View (loja padrão, sem exceção)
+      function adicionarLinhaTabela() {
+        const { codigo, elementId } = obterProximoCodigoLoja();
+        criarLojaCompleta(codigo, elementId, "Nova Loja Exemplo", false);
+      }
+
+      // Cria o Card Detalhado de Exceção
+      function criarCardExcecao(cardId, codigoLoja, nomeLoja) {
+        const container = document.getElementById("container-excecoes");
+        if (!container) return;
+
+        const card = document.createElement("div");
+        card.id = cardId;
+        card.className = "bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4 target:ring-2 target:ring-blue-500 scroll-mt-20";
+        card.innerHTML = `
+          <div class="flex justify-between items-start border-b border-slate-100 pb-4">
+            <div>
+              <span contenteditable="true" class="text-xs font-bold text-blue-600 uppercase tracking-wider block">Código ${codigoLoja}</span>
+              <h3 contenteditable="true" class="text-lg font-bold text-slate-900">${nomeLoja}</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <span onclick="alterarStatusOperacional(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full cursor-pointer select-none">OPERACIONAL</span>
+              <button onclick="removerExcecao('${cardId}')" class="text-slate-400 hover:text-red-600 transition-colors p-1" title="Excluir Exceção">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm bg-slate-50 p-4 rounded-lg">
+            <div>
+              <strong class="text-slate-500 block text-xs">Razão da Exceção:</strong>
+              <span contenteditable="true" class="text-slate-800 block">Descreva a razão da exceção aqui...</span>
+            </div>
+            <div>
+              <strong class="text-slate-500 block text-xs">Data da Implantação:</strong>
+              <span contenteditable="true" class="text-slate-800 block">DD/MM/AAAA</span>
+            </div>
+            <div>
+              <strong class="text-slate-500 block text-xs">Analista Implantador:</strong>
+              <span contenteditable="true" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 mt-1">@Analista</span>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-semibold text-slate-900 mb-3">Divergências Mapeadas:</h4>
+            <ul class="space-y-2 text-sm text-slate-700">
+              <li class="flex items-start gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 mt-1.5 shrink-0"></span>
+                <div contenteditable="true"><strong>Item Divergente:</strong> Detalhes da divergência.</div>
+              </li>
+            </ul>
+          </div>
+        `;
+        container.appendChild(card);
+        lucide.createIcons();
+        recalcularContadores();
+      }
+
+      // Remove um card de exceção e ajusta a linha correspondente na tabela
+      function removerExcecao(cardId) {
+        if (confirm("Deseja realmente remover este registro de exceção?")) {
+          const card = document.getElementById(cardId);
+          if (card) card.remove();
+
+          const linha = document.getElementById(`linha-${cardId}`);
+          if (linha) {
+            const spanExcecao = linha.cells[4].querySelector("span");
+            if (spanExcecao) {
+              spanExcecao.textContent = "NÃO";
+              spanExcecao.className = "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+            }
+          }
+
+          recalcularContadores();
+        }
+      }
+
+      // Remove uma linha da tabela e também limpa o card de exceção se existir
+      function removerLinhaTabela(linhaId, cardId) {
+        if (confirm("Deseja realmente excluir esta loja da tabela?")) {
+          const linha = document.getElementById(linhaId);
+          if (linha) linha.remove();
+
+          const card = document.getElementById(cardId);
+          if (card) card.remove();
+
+          recalcularContadores();
+        }
+      }
+
+      // Persistência de dados no Google Apps Script
+      function obterEstadoGeralJSON() {
+        // Sincroniza textarea.value -> textContent SEM disparar o observador
+        // de alterações: caso contrário, o próprio ato de salvar geraria uma
+        // mutação no DOM que marcaria o documento como alterado de novo,
+        // reagendando outro auto-save 3s depois, num loop infinito.
+        executarSemObservarAlteracoes(() => {
+          document.querySelectorAll("textarea").forEach((ta) => {
+            ta.textContent = ta.value;
+          });
+        });
+
+        const container = document.getElementById("documento-container");
+        return JSON.stringify({
+          conteudoHTML: container.innerHTML,
+          timestamp: new Date().toLocaleString(),
+        });
+      }
+
+      // --- Auto-save por debounce --------------------------------------------
+      // Em vez de salvar incondicionalmente a cada N segundos, o save só é
+      // agendado quando o documento realmente muda (edição de texto, criação
+      // ou remoção de linhas/cards, alteração de status). Isso reduz as
+      // chamadas ao Apps Script e evita sobrescrever o rascunho quando nada
+      // foi alterado.
+      let estadoAlterado = false;
+      let idTimeoutAutoSave = null;
+      let observadorAlteracoes = null;
+      const AUTO_SAVE_DEBOUNCE_MS = 3000; // salva ~3s após a última alteração
+      const AUTO_SAVE_SEGURANCA_MS = 2 * 60 * 1000; // rede de segurança: a cada 2 min, se houver algo pendente
+
+      function marcarComoAlterado() {
+        estadoAlterado = true;
+        if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
+        idTimeoutAutoSave = setTimeout(autoSalvarNoGoogle, AUTO_SAVE_DEBOUNCE_MS);
+      }
+
+      // Executa `fn` com o observador de alterações temporariamente
+      // desligado. Usado para mudanças no DOM feitas pela própria aplicação
+      // (ex.: sincronizar textareas antes de salvar/exportar) que não devem
+      // ser tratadas como uma edição do usuário.
+      function executarSemObservarAlteracoes(fn) {
+        if (observadorAlteracoes) observadorAlteracoes.disconnect();
+        try {
+          fn();
+        } finally {
+          if (observadorAlteracoes) {
+            const container = document.getElementById("documento-container");
+            if (container) {
+              observadorAlteracoes.observe(container, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+              });
+            }
+          }
+        }
+      }
+
+      // Observa qualquer mutação no documento (texto, atributos, filhos
+      // adicionados/removidos) para disparar o auto-save por debounce.
+      function iniciarObservadorDeAlteracoes() {
+        const container = document.getElementById("documento-container");
+        if (!container) return;
+
+        observadorAlteracoes = new MutationObserver(() => marcarComoAlterado());
+        observadorAlteracoes.observe(container, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+          attributes: true,
+        });
+      }
+
+      function autoSalvarNoGoogle() {
+        idTimeoutAutoSave = null;
+
+        if (!estadoAlterado) return; // nada para salvar
+        if (typeof google === "undefined" || !google.script) return;
+
+        const estadoJSON = obterEstadoGeralJSON();
+        google.script.run
+          .withSuccessHandler(() => {
+            estadoAlterado = false;
+            exibirIndicadorSalvo();
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao salvar no Google Apps Script:", erro);
+            exibirErroSalvamento("Falha ao salvar seu progresso. Tentando novamente em breve...");
+            // Mantém estadoAlterado = true para a rede de segurança tentar de novo.
+          })
+          .salvarEstadoCompleto(estadoJSON);
+      }
+
+      function carregarEstadoGoogle() {
+        if (typeof google === "undefined" || !google.script) {
+          iniciarObservadorDeAlteracoes();
+          return;
+        }
+
+        exibirCarregando();
+
+        google.script.run
+          .withSuccessHandler((rascunhoJson) => {
+            if (rascunhoJson) {
+              try {
+                const dados = JSON.parse(rascunhoJson);
+                const container = document.getElementById("documento-container");
+
+                if (dados.conteudoHTML && container) {
+                  container.innerHTML = dados.conteudoHTML;
+
+                  document.querySelectorAll("textarea").forEach((ta) => {
+                    ta.value = ta.textContent;
+                  });
+
+                  if (window.lucide) lucide.createIcons();
+                  recalcularContadores();
+                }
+              } catch (e) {
+                console.error("Erro ao restaurar rascunho:", e);
+              }
+            }
+            ocultarCarregando();
+            iniciarObservadorDeAlteracoes();
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao carregar rascunho do Google Apps Script:", erro);
+            ocultarCarregando();
+            exibirErroSalvamento("Não foi possível carregar o rascunho salvo. Exibindo o modelo padrão.");
+            iniciarObservadorDeAlteracoes();
+          })
+          .carregarEstadoCompleto();
+      }
+
+      function limparRascunhoGoogle() {
+        if (confirm("Deseja limpar o rascunho salvo na nuvem e voltar ao modelo padrão de fábrica?")) {
+          if (typeof google !== "undefined" && google.script) {
+            google.script.run
+              .withSuccessHandler(() => {
+                location.reload();
+              })
+              .withFailureHandler((erro) => {
+                console.error("Erro ao resetar rascunho:", erro);
+                exibirErroSalvamento("Falha ao limpar o rascunho na nuvem. Tente novamente.");
+              })
+              .resetarParaModeloPadrao();
+          } else {
+            location.reload();
+          }
+        }
+      }
+
+      function exportarArquivoProjeto() {
+        const dados = obterEstadoGeralJSON();
+        const blob = new Blob([dados], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `projeto_mapeamento_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function importarArquivoProjeto(event) {
+        const input = event.target;
+        if (!input.files || !input.files[0]) return;
+
+        if (!confirm("Importar este projeto substituirá TODO o conteúdo atual do documento em tela. Deseja continuar?")) {
+          input.value = "";
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const dados = JSON.parse(e.target.result);
+            if (dados.conteudoHTML) {
+              document.getElementById("documento-container").innerHTML = dados.conteudoHTML;
+
+              document.querySelectorAll("textarea").forEach((ta) => {
+                ta.value = ta.textContent;
+              });
+
+              if (window.lucide) lucide.createIcons();
+              recalcularContadores();
+
+              marcarComoAlterado();
+              autoSalvarNoGoogle();
+              alert("Projeto importado e salvo com sucesso!");
+            }
+          } catch (err) {
+            alert("Arquivo de projeto inválido!");
+          }
+          input.value = "";
+        };
+        reader.readAsText(input.files[0]);
+      }
+
+      // Controlling mobile sidebar
+      function toggleSidebar() {
+        const sidebar = document.getElementById('default-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const mainContent = document.getElementById('documento-container');
+
+        if (!sidebar) return;
+
+        const estaFechada = sidebar.classList.contains('-translate-x-full');
+
+        if (estaFechada) {
+            sidebar.classList.remove('-translate-x-full');
+            if (overlay) overlay.classList.remove('hidden');
+            if (mainContent) {
+              mainContent.classList.add('blur-sm', 'pointer-events-none', 'select-none');
+            }
+        } else {
+            sidebar.classList.add('-translate-x-full');
+            if (overlay) overlay.classList.add('hidden');
+            if (mainContent) {
+              mainContent.classList.remove('blur-sm', 'pointer-events-none', 'select-none');
+            }
+        }
+      }
+
+      function fecharSidebarMobile() {
+        if (window.innerWidth < 640) {
+            const sidebar = document.getElementById('default-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const mainContent = document.getElementById('documento-container');
+
+            if (sidebar && !sidebar.classList.contains('-translate-x-full')) {
+              sidebar.classList.add('-translate-x-full');
+              if (overlay) overlay.classList.add('hidden');
+              if (mainContent) mainContent.classList.remove('blur-sm', 'pointer-events-none', 'select-none');
+            }
+        }
+      }
+
+      // Initializer
+      document.addEventListener("DOMContentLoaded", () => {
+        carregarEstadoGoogle();
+        recalcularContadores();
+
+        // Rede de segurança: caso uma alteração pendente não tenha sido
+        // salva pelo debounce (ex.: falha de rede pontual), tenta novamente
+        // periodicamente em um intervalo bem mais espaçado.
+        setInterval(() => {
+          if (estadoAlterado) autoSalvarNoGoogle();
+        }, AUTO_SAVE_SEGURANCA_MS);
+      });
+
+      function exibirIndicadorSalvo() {
+        let ind = document.getElementById("indicador-salvo");
+        if (!ind) {
+          ind = document.createElement("div");
+          ind.id = "indicador-salvo";
+          ind.className =
+            "fixed bottom-3 left-3 bg-slate-800/80 text-white text-[10px] px-2 py-1 rounded backdrop-blur z-50 transition-opacity opacity-0";
+          document.body.appendChild(ind);
+        }
+        ind.innerText = "☁️ Progresso salvo na conta";
+        ind.classList.remove("opacity-0");
+        setTimeout(() => ind.classList.add("opacity-0"), 2500);
+      }
+
+      // Indicador de erro de salvamento/carregamento (feedback visual para
+      // falhas do google.script.run, que antes falhavam em silêncio).
+      function exibirErroSalvamento(mensagem) {
+        let ind = document.getElementById("indicador-erro");
+        if (!ind) {
+          ind = document.createElement("div");
+          ind.id = "indicador-erro";
+          ind.className =
+            "fixed bottom-3 left-3 bg-red-600/90 text-white text-[11px] px-3 py-2 rounded backdrop-blur z-50 transition-opacity opacity-0 max-w-xs shadow-lg";
+          document.body.appendChild(ind);
+        }
+        ind.innerText = "⚠️ " + mensagem;
+        ind.classList.remove("opacity-0");
+        setTimeout(() => ind.classList.add("opacity-0"), 4000);
+      }
+
+      // Overlay de carregamento exibido enquanto o rascunho salvo é buscado
+      // no Apps Script, evitando o "piscar" do modelo padrão antes de
+      // restaurar o conteúdo real do usuário.
+      function exibirCarregando() {
+        let overlay = document.getElementById("overlay-carregando");
+        if (!overlay) {
+          overlay = document.createElement("div");
+          overlay.id = "overlay-carregando";
+          overlay.className =
+            "fixed inset-0 z-50 bg-white/70 backdrop-blur-sm flex items-center justify-center";
+          overlay.innerHTML =
+            '<div class="flex items-center gap-3 bg-white px-5 py-3 rounded-xl shadow-lg border border-slate-200">' +
+            '<div class="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>' +
+            '<span class="text-sm font-medium text-slate-700">Carregando rascunho salvo...</span>' +
+            "</div>";
+          document.body.appendChild(overlay);
+        }
+      }
+
+      function ocultarCarregando() {
+        const overlay = document.getElementById("overlay-carregando");
+        if (overlay) overlay.remove();
+      }
+    </script>
+  </body>
+</html>
