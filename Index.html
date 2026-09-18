@@ -705,7 +705,11 @@
         fecharSidebarMobile();
       }
 
-      // Função para extrair o HTML totalmente limpo e pronto para o Jira
+      // Função para extrair o HTML totalmente limpo e pronto para o Jira.
+      // Exporta apenas o conteúdo de #documento-container (não o <html>/<head>
+      // inteiro): evita levar para o Jira os <script> de CDN (Tailwind/
+      // Lucide), o @import de fonte do Google e toda a lógica JS inline, que
+      // não fazem sentido fora do Apps Script e só poluem o HTML colado.
       function obterHTMLTratado() {
         // Mesma cautela de obterEstadoGeralJSON(): sincronizar as textareas
         // não deve ser tratado como uma edição do usuário pelo observador de
@@ -716,41 +720,53 @@
           });
         });
 
-        const cloneDoc = document.documentElement.cloneNode(true);
+        const container = document.getElementById("documento-container");
+        const clone = container.cloneNode(true);
 
-        cloneDoc.querySelectorAll(".tab-content").forEach((tab) => {
+        clone.querySelectorAll(".tab-content").forEach((tab) => {
           tab.classList.remove("hidden");
         });
 
-        const sidebar = cloneDoc.querySelector("#default-sidebar");
-        if (sidebar) sidebar.remove();
-        const overlay = cloneDoc.querySelector("#sidebar-overlay");
-        if (overlay) overlay.remove();
-        const botaoMenuMobile = cloneDoc.querySelector('button[onclick="toggleSidebar()"]');
-        if (botaoMenuMobile) botaoMenuMobile.remove();
-
-        cloneDoc.querySelectorAll("[contenteditable]").forEach((el) => {
+        clone.querySelectorAll("[contenteditable]").forEach((el) => {
           el.removeAttribute("contenteditable");
         });
 
-        const toast = cloneDoc.querySelector("#toast");
-        if (toast) toast.remove();
-        const indicadorSalvo = cloneDoc.querySelector("#indicador-salvo");
-        if (indicadorSalvo) indicadorSalvo.remove();
+        // Remove qualquer <script> porventura clonado dentro do container.
+        clone.querySelectorAll("script").forEach((script) => script.remove());
 
-        // Remove todos os <script> (CDNs externos do Tailwind/Lucide e a lógica
-        // inteira da aplicação): não fazem sentido fora do Apps Script e só
-        // poluem/quebram o conteúdo ao colar no Jira/Confluence.
-        cloneDoc.querySelectorAll("script").forEach((script) => script.remove());
-
-        // Remove atributos de interatividade que ficam "mortos" sem os scripts
-        // acima (onclick/oninput/onchange não têm mais nenhum efeito).
+        // Remove atributos de interatividade que ficam "mortos" sem a lógica
+        // JS da aplicação (onclick/oninput/onchange não têm mais efeito).
         const atributosParaRemover = ["onclick", "oninput", "onchange"];
-        cloneDoc.querySelectorAll("*").forEach((el) => {
+        clone.querySelectorAll("*").forEach((el) => {
           atributosParaRemover.forEach((attr) => el.removeAttribute(attr));
         });
 
-        return "<!DOCTYPE html>\n" + cloneDoc.outerHTML;
+        // Os ícones Lucide (<i data-lucide="...">) ficam vazios sem o script
+        // do Lucide para renderizá-los — remove o atributo para não deixar
+        // marcação morta/confusa no HTML colado.
+        clone.querySelectorAll("[data-lucide]").forEach((el) => {
+          el.removeAttribute("data-lucide");
+        });
+
+        // Documento HTML mínimo e autocontido: sem CDNs externos, sem script,
+        // com apenas o CSS necessário para preservar a leitura do conteúdo
+        // (a estilização completa via Tailwind não é reproduzível fora dele).
+        return (
+          "<!DOCTYPE html>\n" +
+          '<html lang="pt-BR">\n' +
+          "<head>\n" +
+          '  <meta charset="UTF-8" />\n' +
+          "  <title>Mapeamento de Marcas</title>\n" +
+          "  <style>\n" +
+          '    body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; }\n' +
+          "    table { border-collapse: collapse; width: 100%; }\n" +
+          "    th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }\n" +
+          "  </style>\n" +
+          "</head>\n" +
+          "<body>\n" +
+          clone.outerHTML +
+          "\n</body>\n</html>"
+        );
       }
 
       // Copia o HTML limpo para a Área de Transferência
@@ -1340,6 +1356,41 @@
         }
       }
 
+      // Sanitiza um trecho de HTML antes de reinseri-lo via innerHTML,
+      // removendo <script>/<style>/<iframe> e qualquer atributo de evento
+      // ("on*") que NÃO seja uma chamada às funções internas que o próprio
+      // app usa para os botões/badges de status (ex.: onclick="alterarStatus(this)").
+      // Usado tanto ao restaurar o rascunho salvo na nuvem quanto ao importar
+      // um arquivo .json de projeto — ambos podem trazer HTML de origem não
+      // totalmente confiável (rascunho salvo com HTML colado num campo
+      // contenteditable, arquivo compartilhado por outro analista etc.),
+      // reduzindo o risco de um handler injetado (ex.: <img onerror="...">)
+      // ser reexecutado ao ser recarregado (self-XSS), sem quebrar os
+      // onclick legítimos gerados pelo próprio app.
+      const CHAMADA_PERMITIDA = /^(alterarStatus|adicionarLinhaTabela|alterarStatusOperacional|alterarStatusExcecao|removerLinhaTabela|adicionarNovaExcecao|removerExcecao|recalcularContadores)\(/;
+
+      function sanitizarHTMLDocumento(html) {
+        const doc = new DOMParser().parseFromString(html || "", "text/html");
+
+        doc.querySelectorAll("script, style, iframe, object, embed").forEach((el) => el.remove());
+
+        doc.querySelectorAll("*").forEach((el) => {
+          [...el.attributes].forEach((attr) => {
+            const nome = attr.name.toLowerCase();
+            const valor = attr.value.trim();
+
+            if (nome.startsWith("on") && CHAMADA_PERMITIDA.test(valor)) {
+              return; // handler interno conhecido do app, mantém
+            }
+            if (nome.startsWith("on") || valor.toLowerCase().startsWith("javascript:")) {
+              el.removeAttribute(attr.name);
+            }
+          });
+        });
+
+        return doc.body.innerHTML;
+      }
+
       // Persistência de dados no Google Apps Script
       function obterEstadoGeralJSON() {
         // Sincroniza textarea.value -> textContent SEM disparar o observador
@@ -1451,7 +1502,7 @@
                 const container = document.getElementById("documento-container");
 
                 if (dados.conteudoHTML && container) {
-                  container.innerHTML = dados.conteudoHTML;
+                  container.innerHTML = sanitizarHTMLDocumento(dados.conteudoHTML);
 
                   document.querySelectorAll("textarea").forEach((ta) => {
                     ta.value = ta.textContent;
@@ -1521,7 +1572,7 @@
           try {
             const dados = JSON.parse(e.target.result);
             if (dados.conteudoHTML) {
-              document.getElementById("documento-container").innerHTML = dados.conteudoHTML;
+              document.getElementById("documento-container").innerHTML = sanitizarHTMLDocumento(dados.conteudoHTML);
 
               document.querySelectorAll("textarea").forEach((ta) => {
                 ta.value = ta.textContent;

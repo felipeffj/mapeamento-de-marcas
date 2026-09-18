@@ -59,11 +59,13 @@ mapeamento-de-marcas/
 - **Exportar para Jira/Confluence**:
   - **Copiar Wiki Markup (Nível 1)** e **Copiar Wiki Markup (Nível 2)** — botões ativos na sidebar. Geram, a partir dos dados atuais de cada nível, um texto em [sintaxe clássica de wiki markup do Confluence](https://confluence.atlassian.com/doc/confluence-wiki-markup-251003035.html) (`{panel}`, `{status}`, `{warning}`, `{note}`, `{expand}`, tabelas `||...||`) e copiam para a área de transferência. Devem ser colados dentro da macro **Markup** do Confluence (inserida manualmente pelo usuário via `+`/Inserir → Markup), pois o editor novo do Confluence Server/Data Center não converte esse texto automaticamente se colado direto no corpo da página.
     - O Nível 2 inclui o resumo de rollout (total/padrão/exceções/implantação), a tabela quick-view de lojas (com badges coloridos por status) e o registro detalhado de cada exceção (painel com metadados + lista de divergências mapeadas). Se não houver nenhuma exceção registrada, o texto gerado indica isso explicitamente em vez de gerar uma seção vazia.
-  - **Copiar HTML Limpo** / **Baixar .html** — ocultos por padrão na interface atual (ver decisão de UX abaixo), mas as funções (`copiarHTMLJira()`, `baixarHTML()`) continuam implementadas para uma eventual reativação futura. Geram uma cópia "limpa" do HTML (remove `<script>`, `contenteditable`, `onclick`/`oninput`/`onchange`, sidebar, overlay, toast, menu mobile).
+  - **Copiar HTML Limpo** / **Baixar .html** — ocultos por padrão na interface atual (ver decisão de UX abaixo), mas as funções (`copiarHTMLJira()`, `baixarHTML()`) continuam implementadas para uma eventual reativação futura. Exportam apenas o conteúdo de `#documento-container` (não a página inteira), envolvido num HTML mínimo e autocontido — sem CDNs externos, sem `<script>`, sem `contenteditable`/`onclick`/`oninput`/`onchange` e sem os atributos `data-lucide` (que ficariam como ícones "mortos" sem o script do Lucide).
     - *Motivo de estarem ocultos*: ao colar o HTML "limpo" em uma página do Confluence, praticamente todo o estilo visual (Tailwind) se perde — o resultado é funcional, mas visualmente pobre. A alternativa de Wiki Markup, embora exija montagem manual de macros, aproveita melhor os recursos nativos do Confluence.
-- **Exportar/Importar projeto (.json)**: baixa/carrega um snapshot local do `innerHTML` do documento. A importação pede confirmação antes de sobrescrever o conteúdo atual.
-- **Auto-save na nuvem com debounce**: alterações no documento (detectadas via `MutationObserver`) disparam `google.script.run.salvarEstadoCompleto()` após 3s de inatividade, com uma verificação de segurança adicional a cada 2 minutos. Falhas de salvamento/carregamento exibem um indicador visual de erro (`exibirErroSalvamento()`), e o carregamento inicial mostra um overlay de carregamento.
+- **Exportar/Importar projeto (.json)**: baixa/carrega um snapshot local do `innerHTML` do documento. A importação pede confirmação antes de sobrescrever o conteúdo atual, e o HTML lido do arquivo passa por `sanitizarHTMLDocumento()` antes de ser reinserido (ver nota de segurança abaixo).
+- **Auto-save na nuvem com debounce**: alterações no documento (detectadas via `MutationObserver`) disparam `google.script.run.salvarEstadoCompleto()` após 3s de inatividade, com uma verificação de segurança adicional a cada 2 minutos. Falhas de salvamento/carregamento exibem um indicador visual de erro (`exibirErroSalvamento()`), e o carregamento inicial mostra um overlay de carregamento. O HTML recebido do Apps Script também passa por `sanitizarHTMLDocumento()` antes de ser reinserido no documento.
 - **Reset para modelo padrão**: apaga o rascunho salvo e recarrega a página (volta ao HTML original do arquivo).
+
+> **Nota de segurança:** `sanitizarHTMLDocumento(html)` remove `<script>`/`<style>`/`<iframe>`/`<object>`/`<embed>` e qualquer atributo de evento (`on*`) que não seja uma chamada a uma das funções internas conhecidas do app (`alterarStatus`, `alterarStatusOperacional`, `alterarStatusExcecao`, `adicionarLinhaTabela`, `adicionarNovaExcecao`, `removerLinhaTabela`, `removerExcecao`, `recalcularContadores`), além de hrefs/srcs com esquema `javascript:`. Isso reduz o risco de um HTML colado num campo `contenteditable` (ou um `.json` de projeto compartilhado) reintroduzir um handler malicioso ao ser recarregado, sem quebrar os `onclick` legítimos dos badges/botões gerados dinamicamente.
 
 ## Modelo de persistência
 
@@ -71,103 +73,53 @@ O "banco de dados" é uma única chave (`RASCUNHO_MAPEAMENTO_COMPLETO`) nas *Use
 
 ## Limitações conhecidas
 
-- `PropertiesService` tem limite de **9 KB por valor** e **500 KB de armazenamento total por usuário/script**. Como o valor salvo é o HTML inteiro (com todas as classes Tailwind, ícones etc.), projetos com muitas lojas/exceções podem estourar esse limite silenciosamente (sem tratamento de erro — ver item 2 da análise).
-- Existe **apenas 1 slot de rascunho por usuário** — um analista que mapeia mais de uma marca no mesmo dia sobrescreve o rascunho anterior sem aviso.
-- Não há histórico/versionamento: o auto-save sobrescreve o estado anterior a cada 15s.
+- `PropertiesService` tem limite de **9 KB por valor** e **500 KB de armazenamento total por usuário/script**. Como o valor salvo é o HTML inteiro (com todas as classes Tailwind, ícones etc.), projetos com muitas lojas/exceções podem estourar esse limite — hoje o `.withFailureHandler` ao menos avisa o usuário visualmente (ver item 7.2 da análise, ainda pendente na raiz do problema).
+- Existe **apenas 1 slot de rascunho por usuário** — um analista que mapeia mais de uma marca no mesmo dia sobrescreve o rascunho anterior sem aviso (ver item 7.1 da análise).
+- Não há histórico/versionamento: o auto-save (por debounce, ~3s após a última edição) sobrescreve o estado anterior a cada save.
 
 ---
 
 ## Análise técnica e pontos de melhoria
 
-Revisão do estado atual do código (`Index.html` + `Code.gs`), confirmando/atualizando a lista anterior e adicionando novos achados.
+Revisão do estado atual do código (`Index.html` + `Code.gs`), em 2026-09-18, confirmando o que já foi corrigido em sessões anteriores e o que ainda é uma pendência real.
 
-> **Status de implementação:** os itens **1 a 6** e **7.4, 7.5, 7.8** desta análise já foram corrigidos no código atual (ver histórico de commits/sessão). O texto abaixo foi mantido como registro da análise original que motivou as correções; onde aplicável, os trechos de código mostrados refletem o estado **anterior** ao fix.
+### ✅ Itens já corrigidos e confirmados no código atual
 
-### 1. Dados sensíveis no HTML — ✅ já resolvido no arquivo atual
-O arquivo hoje só contém placeholders (`[Nome da Marca]`, `[Ex: 15 lojas]`, `admin@franquiamarca.com.br`, `@Analista`) e exemplos genéricos de hardware (Sunmi, Gertec, Epson, Toledo). Não há CNPJ, nome de cliente real, e-mail real nem dado identificável no template atual. **Ação recomendada**: manter esse cuidado como regra de contribuição (nunca commitar um rascunho exportado com dados reais de cliente) e adicionar isso ao guia de contribuição.
+| # | Item | Onde foi corrigido |
+|---|------|---------------------|
+| 1 | **Dados sensíveis no HTML.** O arquivo só contém placeholders (`[Nome da Marca]`, `admin@franquiamarca.com.br`, `@Analista`) e exemplos genéricos de hardware. Nenhum CNPJ, cliente real ou e-mail real. | Template já sanitizado. |
+| 2 | **Falta de tratamento de erro no `google.script.run`.** As três chamadas (`autoSalvarNoGoogle`, `carregarEstadoGoogle`, `limparRascunhoGoogle`) agora têm `.withFailureHandler(...)`, exibindo um indicador visual de erro (`exibirErroSalvamento()`) em vez de falhar silenciosamente. | `autoSalvarNoGoogle`, `carregarEstadoGoogle`, `limparRascunhoGoogle` |
+| 3 | **Bug do cancelamento em `alterarStatusExcecao`.** O `confirm()` agora é chamado **antes** de qualquer alteração de `textContent`/`className`; se o usuário cancelar, o badge e o card de exceção permanecem exatamente como estavam (sem dessincronia). | `alterarStatusExcecao` |
+| 4 | **Geração de IDs por contagem de elementos.** Substituído por `obterProximoCodigoLoja()`, que calcula o próximo código a partir do **maior número já usado** na tabela (não da contagem de filhos) e garante, com um laço de verificação, que o `id` gerado ainda não existe no DOM — elimina colisão de IDs ao remover/adicionar lojas fora de ordem. | `obterProximoCodigoLoja` |
+| 6 | **Auto-save incondicional a cada 15s.** Substituído por auto-save reativo por **debounce** (`marcarComoAlterado()` + `MutationObserver` no `#documento-container`, salva ~3s após a última edição real) com uma rede de segurança bem mais espaçada (a cada 2 min, só se houver algo pendente). | `marcarComoAlterado`, `autoSalvarNoGoogle`, `AUTO_SAVE_DEBOUNCE_MS`/`AUTO_SAVE_SEGURANCA_MS` |
+| 7.4 | **Import de projeto sobrescrevia sem confirmação.** `importarArquivoProjeto()` agora exibe um `confirm()` antes de sobrescrever o documento em tela. | `importarArquivoProjeto` |
+| 7.5 | **Sem indicador de carregamento inicial.** `carregarEstadoGoogle()` agora exibe um overlay (`exibirCarregando()`/`ocultarCarregando()`) até a resposta do `google.script.run` chegar. | `carregarEstadoGoogle` |
+| 7.8 | **Duplicação de lógica entre `adicionarLinhaTabela` e `adicionarNovaExcecao`.** Unificadas em `criarLojaCompleta(codigo, elementId, nomeLoja, comExcecao)`, usada pelos dois fluxos. | `criarLojaCompleta` |
 
-### 2. Falta de tratamento de erro no `google.script.run` — confirmado, ainda presente
-As três chamadas (`autoSalvarNoGoogle`, `carregarEstadoGoogle`, `limparRascunhoGoogle`) só definem `.withSuccessHandler(...)`, sem `.withFailureHandler(...)`. Isso significa que:
-- Se o `PropertiesService` estourar o limite de 9 KB (bem provável em projetos grandes, ver seção anterior), o auto-save falha **silenciosamente** — o usuário acha que está salvando a cada 15s, mas nada é persistido.
-- Erros de sessão expirada, quota do Apps Script, ou falha de rede não geram nenhum feedback visual.
+### ✅ Corrigidos nesta revisão (2026-09-18)
 
-**Correção sugerida**: adicionar `.withFailureHandler(erro => exibirErroSalvamento(erro))` em todas as chamadas, com um toast/indicador de erro visível (ex.: "⚠️ Falha ao salvar, tentando novamente...").
+**5. Limpeza do HTML exportado para o Jira/Confluence — melhorada.** `obterHTMLTratado()` antes clonava o `<html>` inteiro (incluindo `<head>` com os `<script>` de CDN do Tailwind/Lucide e o `@import` de fonte do Google) e mantinha os atributos `data-lucide="..."` como ícones "mortos" (sem o script do Lucide para renderizá-los). Agora a função:
+- Exporta **apenas o conteúdo de `#documento-container`**, envolvido num documento HTML mínimo e autocontido (sem nenhum CDN externo, sem `<script>`, com um `<style>` inline mínimo apenas para fonte/bordas de tabela).
+- Remove o atributo `data-lucide` de todos os ícones (em vez de deixá-los como marcação morta).
+- Continua removendo `contenteditable` e os atributos `onclick`/`oninput`/`onchange`, que não têm efeito fora da aplicação.
 
-### 3. Bug do cancelamento em `alterarStatusExcecao` — confirmado
-```js
-function alterarStatusExcecao(el, targetCardId) {
-  const status = el.textContent.trim().toUpperCase();
-  if (status === "SIM") {
-    el.textContent = "NÃO";                 // <- já muda a UI...
-    el.className = "bg-slate-100 ...";
-    const card = document.getElementById(targetCardId);
-    if (card && confirm("Deseja remover o registro detalhado dessa exceção?")) {
-      card.remove();
-      recalcularContadores();
-    }
-    // se o usuário clicar "Cancelar" no confirm(), o badge já ficou "NÃO"
-    // mas o card de exceção continua existindo -> estado inconsistente
-  }
-  ...
-}
-```
-Se o usuário clicar **Cancelar** no `confirm()`, o rótulo já foi trocado para "NÃO" e a classe visual já mudou, mesmo que o card de exceção continue no DOM. Isso deixa a tabela e o card dessincronizados (o card mostra a exceção detalhada, mas a badge diz "NÃO").
+**7.3. `innerHTML` bruto salvo/restaurado sem nenhuma sanitização — corrigido.** Foi adicionada a função `sanitizarHTMLDocumento(html)`, aplicada tanto ao restaurar o rascunho vindo do Apps Script (`carregarEstadoGoogle`) quanto ao importar um arquivo `.json` de projeto (`importarArquivoProjeto`). Ela:
+- Remove qualquer `<script>`, `<style>`, `<iframe>`, `<object>` e `<embed>` porventura presente no HTML restaurado.
+- Remove todo atributo de evento (`on*`) **exceto** quando o valor é uma chamada a uma das funções internas que o próprio app usa nos badges/botões gerados dinamicamente (`alterarStatus`, `alterarStatusOperacional`, `alterarStatusExcecao`, `adicionarLinhaTabela`, `adicionarNovaExcecao`, `removerLinhaTabela`, `removerExcecao`, `recalcularContadores`) — preservando a interatividade legítima da tabela/cards, mas bloqueando um handler injetado (ex.: `<img onerror="...">` colado em um campo `contenteditable`).
+- Remove `href`/`src` com o esquema `javascript:`.
 
-**Correção sugerida**: só alterar `textContent`/`className` **depois** de confirmar a remoção; se o usuário cancelar, não tocar no elemento:
-```js
-function alterarStatusExcecao(el, targetCardId) {
-  const status = el.textContent.trim().toUpperCase();
-  if (status === "SIM") {
-    if (!confirm("Deseja remover o registro detalhado dessa exceção?")) return;
-    el.textContent = "NÃO";
-    el.className = "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
-    const card = document.getElementById(targetCardId);
-    if (card) card.remove();
-    recalcularContadores();
-  } else { ... }
-}
-```
+> Não foi adotado `DOMPurify` (biblioteca externa) porque isso exigiria mais uma dependência de CDN (ver item 7.6, ainda em aberto) — a sanitização por *allowlist* acima cobre o cenário de risco real do app (HTML colado num `contenteditable` ou um `.json` de projeto de origem não totalmente confiável) sem quebrar os `onclick` que o próprio app depende para funcionar.
 
-### 4. Geração de IDs por contagem de elementos — confirmado, com um problema adicional
-Duas funções diferentes geram o código da loja (`L00X`) de duas formas diferentes:
-- `adicionarLinhaTabela()` → `codigo = tbody.children.length + 1`
-- `adicionarNovaExcecao()` → `codigo = container.children.length + 2` (offset diferente, propositalmente compensando a linha de exemplo `L001`, mas frágil)
-
-Como o número é baseado na **contagem atual de filhos**, e não em um contador incremental global nem no maior código já usado:
-- Remover uma loja do meio da lista e adicionar outra gera um `id` (`loja-lXXX`) **já existente no DOM** → `document.getElementById` passa a retornar sempre o primeiro elemento com aquele id, e botões de "Ver Exceção"/"Excluir" passam a agir na loja errada.
-- Como as duas funções usam contadores independentes (tabela vs. container de exceções), clicar em "Adicionar Loja" e "Adicionar Nova Exceção" em sequências diferentes pode gerar o mesmo código para lojas diferentes.
-
-**Correção sugerida**: manter um contador incremental persistido (ex.: `data-next-id` num elemento pai, ou parte do estado salvo) que só cresce, nunca reaproveitando números removidos; ou gerar IDs a partir de um contador global armazenado em `obterEstadoGeralJSON`/carregado junto com o estado, garantindo unicidade mesmo após exclusões.
-
-### 5. Limpeza do HTML exportado para o Jira — parcialmente resolvido, pode melhorar bastante
-`obterHTMLTratado()` hoje remove: `contenteditable`, sidebar, overlay e o toast. Porém a exportação ainda:
-- Clona o **`<html>` inteiro**, incluindo `<head>` com `<script src="https://cdn.tailwindcss.com">`, `<script src="https://unpkg.com/lucide@latest">` e o `<style>` com `@import` de fonte do Google — ou seja, ao colar no Jira, o conteúdo tenta carregar 3 recursos externos e reprocessar Tailwind/Lucide, o que normalmente é bloqueado/ignorado pelo editor do Jira e gera HTML poluído.
-- Mantém **todos os `<script>` inline** com toda a lógica da aplicação (funções, `setInterval`, chamadas a `google.script.run`) dentro do HTML exportado — isso não faz sentido fora do Apps Script e infla desnecessariamente o conteúdo colado.
-- Mantém atributos `onclick="..."` em elementos que não deveriam mais ser interativos no destino final (ex.: `alterarStatus`, `removerLinhaTabela`).
-- Não remove os `data-lucide="..."` (os ícones ficam como `<i>` vazios sem o script do Lucide para renderizá-los).
-
-**Correção sugerida**: no `obterHTMLTratado()`, além do que já é feito, remover `<script>`, `<style>` externo (ou substituir por CSS inline mínimo), todos os atributos `onclick`/`oninput`, e trocar os `<i data-lucide="...">` por emoji ou SVG estático — exportando apenas o `<body>`/conteúdo do `#documento-container`, não o `<html>` completo.
-
-### 6. Auto-save a cada 15s (sem debounce) — confirmado
-```js
-setInterval(autoSalvarNoGoogle, 15000);
-```
-O auto-save roda **incondicionalmente** a cada 15 segundos, mesmo que nada tenha mudado desde o último save — gerando chamadas desnecessárias ao Apps Script (consumo de cota de execução) e risco de sobrescrever dados de outra aba/sessão aberta pelo mesmo usuário.
-
-**Correção sugerida**: substituir o `setInterval` fixo por um **debounce reativo a mudanças reais** (`input`, `blur`, `DOMSubtree` via `MutationObserver` no `#documento-container`), disparando o save X segundos após a última edição, com um `dirty flag` para não salvar quando nada mudou. Manter um `setInterval` de segurança bem mais espaçado (ex.: a cada 2–5 min) como rede de proteção.
-
-### 7. Novos pontos identificados nesta análise
+### 🟡 Pendências reais que ainda restam (mudanças de arquitetura, fora do escopo de um fix pontual)
 
 | # | Problema | Impacto | Sugestão |
 |---|----------|---------|----------|
-| 7.1 | **Um único slot de rascunho por usuário** (`RASCUNHO_MAPEAMENTO_COMPLETO` é uma chave fixa). Um analista que trabalha em 2+ marcas no mesmo dia sobrescreve o rascunho anterior sem aviso. | Alto — perda silenciosa de trabalho. | Namespacing por projeto/marca (ex.: um ID de projeto na URL/`?projeto=`, chave `RASCUNHO_<id>`), ou lista de projetos salvos. |
-| 7.2 | **Limite de 9 KB por propriedade** do `PropertiesService` vs. salvar o HTML inteiro como string. Projetos com várias exceções passam facilmente desse limite. | Alto — falha silenciosa (agravada pelo item 2). | Migrar de "salvar HTML" para um **modelo de dados JSON estruturado** (array de módulos/lojas/exceções) e renderizar o HTML a partir dele; ou salvar em `PropertiesService` fragmentado em várias chaves, ou usar Google Drive/Sheets como storage para documentos grandes. |
-| 7.3 | **`innerHTML` bruto salvo/restaurado sem sanitização.** Qualquer HTML digitado/colado num campo `contenteditable` é serializado e, no carregamento, reinserido via `container.innerHTML = ...` sem `DOMPurify` ou equivalente. | Médio — risco de HTML/atributos indesejados persistirem e serem reexecutados (self-XSS), especialmente por ser um app colaborativo. | Sanitizar o HTML antes de salvar e ao carregar (`DOMPurify.sanitize`), restringindo tags/atributos permitidos. |
-| 7.4 | **Import de projeto sobrescreve sem confirmação.** `importarArquivoProjeto()` substitui `innerHTML` do documento inteiro assim que o JSON é lido, sem perguntar se o usuário quer descartar o que está em tela. | Médio — perda de dados. | Adicionar `confirm()` antes de sobrescrever, comparando timestamp/mudanças pendentes. |
-| 7.5 | **Sem indicador de carregamento inicial.** `carregarEstadoGoogle()` roda no `DOMContentLoaded`, mas não há spinner/skeleton — em cold start do Apps Script (pode levar alguns segundos) o usuário vê o modelo padrão "piscar" antes do rascunho real carregar. | Baixo/Médio — UX. | Mostrar um overlay de carregamento até a resposta do `google.script.run` chegar. |
+| 7.1 | **Um único slot de rascunho por usuário** (`RASCUNHO_MAPEAMENTO_COMPLETO` é uma chave fixa em `Code.gs`). Um analista que trabalha em 2+ marcas no mesmo dia sobrescreve o rascunho anterior sem aviso. | Alto — perda silenciosa de trabalho. | Namespacing por projeto/marca (ex.: um ID de projeto na URL/`?projeto=`, chave `RASCUNHO_<id>`), ou lista de projetos salvos. |
+| 7.2 | **Limite de 9 KB por propriedade** do `PropertiesService` vs. salvar o HTML inteiro como string. Projetos com várias exceções passam facilmente desse limite. | Alto — falha silenciosa (o `.withFailureHandler` agora ao menos avisa o usuário, mas o limite em si continua existindo). | Migrar de "salvar HTML" para um **modelo de dados JSON estruturado** (array de módulos/lojas/exceções) e renderizar o HTML a partir dele; ou fragmentar em várias chaves no `PropertiesService`, ou usar Drive/Sheets como storage para documentos grandes. |
 | 7.6 | **Dependência de 3 CDNs externos** (Tailwind, Lucide, Google Fonts) carregados a cada acesso, sem fallback caso a rede/CDN falhe (comum em ambientes corporativos com proxy/allowlist restritiva). | Médio — pode quebrar a aplicação inteira em rede corporativa restrita. | Avaliar build local do Tailwind (CLI) e vendorizar os ícones usados, eliminando dependência de rede externa. |
 | 7.7 | **Nenhum controle de versão** do projeto Apps Script (não há `.clasp.json`/histórico Git). | Médio — dificulta rollback e revisão de mudanças. | Adotar `clasp` + repositório Git (mesmo que privado) para o projeto Apps Script. |
-| 7.8 | **Duplicação de lógica de criação de linha/card** entre `adicionarLinhaTabela` e `adicionarNovaExcecao` (HTML quase idêntico digitado 2x). | Baixo — manutenibilidade. | Extrair uma função única `criarLojaCompleta(codigo, nome, uf)` que cria linha + card juntos, usada pelos dois fluxos. |
+
+Os itens 7.1, 7.2, 7.6 e 7.7 exigem decisões de arquitetura (modelo de dados, storage, processo de deploy) e não foram implementados automaticamente nesta revisão — recomenda-se discuti-los antes de qualquer mudança, dado o impacto em como o app persiste e é publicado.
 
 ## Exportação para Wiki Markup (Confluence) — nota técnica
 
