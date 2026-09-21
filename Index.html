@@ -179,38 +179,84 @@
                   </h2>
               </div>
               <div class="p-6">
-                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Nome da Marca / Projeto</span>
-                        <span id="campo-nome-marca-projeto" contenteditable="true" class="text-slate-900 font-medium block">[Nome da Marca]</span>
-                    </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Analista de Projeto</span>
-                        <span contenteditable="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        @Analista
-                        </span>
-                    </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Analistas de Implantação</span>
-                        <div class="flex gap-1 flex-wrap" contenteditable="true">
-                          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_1</span>
-                          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_2</span>
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    
+                    <!-- Card 1: Informações da Marca -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                        <div class="flex items-center gap-2 pb-2 border-b border-slate-200">
+                          <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+                          <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Informações da Marca</span>
+                        </div>
+                        <div class="space-y-2.5">
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Nome da Marca / Projeto</span>
+                            <span id="campo-nome-marca-projeto" contenteditable="true" class="text-slate-900 font-medium text-sm block">[Nome da Marca]</span>
+                          </div>
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Número da Franquia</span>
+                            <span id="campo-numero-franquia" contenteditable="true" class="text-slate-900 font-medium text-sm block">[Ex: 0001]</span>
+                          </div>
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Servidor</span>
+                            <span id="campo-servidor-marca" contenteditable="true" class="text-slate-900 font-medium text-sm block">[Ex: Cloud / PRD]</span>
+                          </div>
                         </div>
                     </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">ECS Responsável</span>
-                        <span contenteditable="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        @ECS
-                        </span>
+
+                    <!-- Card 2: Responsáveis TOTVS -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                        <div class="flex items-center gap-2 pb-2 border-b border-slate-200">
+                          <i data-lucide="users" class="w-4 h-4 text-indigo-600"></i>
+                          <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Responsáveis TOTVS</span>
+                        </div>
+                        <div class="space-y-2.5">
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Analista de Projeto</span>
+                            <span id="campo-analista-projeto" contenteditable="true" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              @Analista
+                            </span>
+                          </div>
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Analistas de Implantação</span>
+                            <div id="campo-analistas-implantacao" class="flex gap-1 flex-wrap" contenteditable="true">
+                              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_1</span>
+                              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">@Analista_2</span>
+                            </div>
+                          </div>
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">ECS Responsável</span>
+                            <span id="campo-ecs-responsavel" contenteditable="true" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                              @ECS
+                            </span>
+                          </div>
+                        </div>
                     </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Qtd. Lojas Inicial</span>
-                        <span contenteditable="true" class="text-slate-900 font-bold block">[Ex: 15 lojas]</span>
+
+                    <!-- Card 3: Qtd. Lojas Inicial -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                        <div class="flex items-center gap-2 pb-2 border-b border-slate-200">
+                          <i data-lucide="store" class="w-4 h-4 text-emerald-600"></i>
+                          <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Qtd. Lojas Inicial</span>
+                        </div>
+                        <div class="py-2">
+                          <span id="campo-qtd-lojas-inicial" contenteditable="true" class="text-2xl font-bold text-slate-900 block">[Ex: 15 lojas]</span>
+                          <span class="text-[11px] text-slate-400 block mt-1">Previsão no escopo inicial</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 italic">Atualizável conforme rollout</div>
                     </div>
-                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-100 md:col-span-2 lg:col-span-1">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Descrição da Operação</span>
-                        <p contenteditable="true" class="text-sm text-slate-600">[Breve resumo sobre a marca e o modelo de atendimento]</p>
+
+                    <!-- Card 4: Descrição da Operação -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                        <div class="flex items-center gap-2 pb-2 border-b border-slate-200">
+                          <i data-lucide="file-text" class="w-4 h-4 text-amber-600"></i>
+                          <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Descrição da Operação</span>
+                        </div>
+                        <div class="py-1">
+                          <p id="campo-descricao-operacao" contenteditable="true" class="text-xs text-slate-600 leading-relaxed">[Breve resumo sobre a marca e o modelo de atendimento]</p>
+                        </div>
+                        <div class="text-[10px] text-slate-400 italic">Contexto operacional geral</div>
                     </div>
+
                   </div>
               </div>
             </section>
@@ -820,8 +866,155 @@
         const el = document.getElementById(id);
         if (!el) return valorPadrao;
         const texto = el.textContent.trim();
-        if (!texto || texto.startsWith("[")) return valorPadrao;
+        if (!texto) return valorPadrao;
+        if (/^\s*\[\s*(nome\s+da\s+marca|ex:.*?|breve\s+resumo.*?)\s*\]\s*$/i.test(texto)) {
+          return valorPadrao;
+        }
         return texto;
+      }
+
+      // Extrai o nome da marca / projeto com resiliência:
+      // 1. Tenta pelo ID oficial 'campo-nome-marca-projeto'.
+      // 2. Se o ID foi removido acidentalmente por edição ou ausente em
+      //    rascunho antigo, localiza semanticamente o card de "Nome da Marca"
+      //    na seção Visão Geral do Projeto.
+      // 3. Só descarta o valor se for exatamente o placeholder padrão
+      //    ("[Nome da Marca]") ou vazio — nomes preenchidos pelo usuário
+      //    (inclusive com colchetes ou caracteres especiais) são preservados.
+      function obterNomeMarca(valorPadrao = "Marca não informada") {
+        const porId = document.getElementById("campo-nome-marca-projeto");
+        if (porId) {
+          const texto = porId.textContent.trim();
+          if (!texto || /^\s*\[\s*nome\s+da\s+marca\s*\]\s*$/i.test(texto)) {
+            return valorPadrao;
+          }
+          return texto;
+        }
+
+        // Fallback semântico (usado apenas se porId não existir no DOM):
+        const rotulos = Array.from(document.querySelectorAll("span, strong, label, p, div"));
+        const rotuloMarca = rotulos.find((el) => {
+          const t = el.textContent.trim().toLowerCase();
+          return t === "nome da marca / projeto" || t === "nome da marca" || t === "marca / projeto";
+        });
+
+        if (rotuloMarca) {
+          const containerCampo = rotuloMarca.parentElement;
+          if (containerCampo) {
+            const editavel = containerCampo.querySelector("[contenteditable]") || containerCampo.querySelector("span:not(.text-xs), p");
+            if (editavel) {
+              const texto = editavel.textContent.trim();
+              if (texto && !/^\s*\[\s*nome\s+da\s+marca\s*\]\s*$/i.test(texto)) {
+                return texto;
+              }
+            }
+          }
+        }
+
+        return valorPadrao;
+      }
+
+      // Localiza um elemento estrutural (tabela, lista etc.) de forma resiliente:
+      // primeiro pelo ID oficial; se não encontrar (ex.: rascunho antigo sem IDs
+      // ou mutação no DOM), busca pela section cujo cabeçalho contenha o termo.
+      function obterElementoSecao(idPreferencial, termoTitulo, seletorInterno, containerRaiz) {
+        if (idPreferencial) {
+          const el = document.getElementById(idPreferencial);
+          if (el) return el;
+        }
+        const raiz = containerRaiz || document;
+        const secoes = Array.from(raiz.querySelectorAll("section"));
+        for (const secao of secoes) {
+          const textoCompleto = secao.textContent.toLowerCase();
+          if (textoCompleto.includes(termoTitulo.toLowerCase())) {
+            const el = secao.querySelector(seletorInterno);
+            if (el) return el;
+          }
+        }
+        return null;
+      }
+
+      // Garante que os IDs estruturais essenciais estejam atribuídos nos
+      // elementos correspondentes do DOM. Útil para recuperar IDs que tenham
+      // sido perdidos durante edição em contenteditable ou que não existiam
+      // em rascunhos legados salvos na nuvem.
+      function assegurarIdsEstruturais() {
+        const nivel1 = document.getElementById("content-nivel1");
+        const nivel2 = document.getElementById("content-nivel2");
+
+        if (nivel1) {
+          // Campos da Visão Geral do Projeto
+          const mapeamentoCampos = [
+            { id: "campo-nome-marca-projeto", termos: ["nome da marca", "marca / projeto"] },
+            { id: "campo-numero-franquia", termos: ["número da franquia", "numero da franquia", "franquia"] },
+            { id: "campo-servidor-marca", termos: ["servidor"] },
+            { id: "campo-analista-projeto", termos: ["analista de projeto"] },
+            { id: "campo-analistas-implantacao", termos: ["analistas de implantação", "analistas de implantacao"] },
+            { id: "campo-ecs-responsavel", termos: ["ecs responsável", "ecs responsavel"] },
+            { id: "campo-qtd-lojas-inicial", termos: ["qtd. lojas inicial", "qtd lojas inicial", "quantidade de lojas"] },
+            { id: "campo-descricao-operacao", termos: ["descrição da operação", "descricao da operacao"] },
+          ];
+
+          const rotulos = Array.from(nivel1.querySelectorAll("span, strong, label, div"));
+          mapeamentoCampos.forEach(({ id, termos }) => {
+            if (!document.getElementById(id)) {
+              const rotulo = rotulos.find((el) => {
+                const t = el.textContent.trim().toLowerCase();
+                return termos.some((termo) => t.includes(termo));
+              });
+              if (rotulo) {
+                const card = rotulo.closest(".bg-slate-50") || rotulo.parentElement;
+                if (card) {
+                  const editavel = card.querySelector("[contenteditable]") || card.querySelector("span:not(.text-xs), p");
+                  if (editavel) editavel.id = id;
+                }
+              }
+            }
+          });
+
+          // Seções do Nível 1
+          if (!document.getElementById("tabela-ecossistema-modulos")) {
+            const el = obterElementoSecao(null, "módulos", "table", nivel1);
+            if (el) el.id = "tabela-ecossistema-modulos";
+          }
+          if (!document.getElementById("lista-pontos-criticos")) {
+            const el = obterElementoSecao(null, "pontos críticos", "ol, ul", nivel1);
+            if (el) el.id = "lista-pontos-criticos";
+          }
+          if (!document.getElementById("lista-dados-tecnicos")) {
+            const el = obterElementoSecao(null, "dados técnicos", ".space-y-3, div:has(> div)", nivel1);
+            if (el) el.id = "lista-dados-tecnicos";
+          }
+          if (!document.getElementById("tabela-hardware-padrao")) {
+            const el = obterElementoSecao(null, "infraestrutura", "table", nivel1)
+              || obterElementoSecao(null, "hardware", "table", nivel1);
+            if (el) el.id = "tabela-hardware-padrao";
+          }
+          if (!document.getElementById("tabela-regras-negocio")) {
+            const el = obterElementoSecao(null, "regras de negócio", "table", nivel1)
+              || obterElementoSecao(null, "permissões", "table", nivel1);
+            if (el) el.id = "tabela-regras-negocio";
+          }
+        }
+
+        if (nivel2) {
+          if (!document.getElementById("tabela-quickview")) {
+            const el = obterElementoSecao(null, "quick-view", "table", nivel2)
+              || obterElementoSecao(null, "lojas ativas", "table", nivel2);
+            if (el) el.id = "tabela-quickview";
+          }
+        }
+      }
+
+      // Extrai os analistas de implantação formatados como texto legível
+      // a partir dos badges de usuário.
+      function obterAnalistasImplantacao() {
+        const el = document.getElementById("campo-analistas-implantacao");
+        if (!el) return "Não informado";
+        const badges = Array.from(el.querySelectorAll("span")).map((s) => s.textContent.trim()).filter(Boolean);
+        if (badges.length) return badges.join(", ");
+        const texto = el.textContent.trim().replace(/\s+/g, " ");
+        return texto || "Não informado";
       }
 
       // Resolve a cor do macro {status} a partir do texto do badge original.
@@ -897,19 +1090,40 @@
 
         const linhas = ["||Item||Valor||"];
         Array.from(container.children).forEach((linha) => {
-          const [rotuloEl, valorEl] = linha.children;
-          if (!rotuloEl || !valorEl) return;
-          const rotulo = rotuloEl.textContent.trim().replace(/:$/, "");
-          const valor = valorEl.textContent.trim();
-          linhas.push(`|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`);
+          const filhos = Array.from(linha.children).filter(
+            (el) => el.tagName !== "I" && el.tagName !== "SVG"
+          );
+          if (filhos.length >= 2) {
+            const rotulo = filhos[0].textContent.trim().replace(/:$/, "");
+            const valor = filhos[1].textContent.trim();
+            if (rotulo || valor) {
+              linhas.push(`|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`);
+            }
+          } else {
+            const texto = linha.textContent.trim();
+            if (texto.includes(":")) {
+              const [r, ...v] = texto.split(":");
+              linhas.push(`|${escaparWikiMarkup(r.trim())}|${escaparWikiMarkup(v.join(":").trim())}|`);
+            }
+          }
         });
 
-        return linhas.join("\n");
+        return linhas.length > 1 ? linhas.join("\n") : "";
       }
 
       // Monta o texto completo em Wiki Markup do Nível 1 (Padrão da Marca).
       function gerarWikiMarkupNivel1() {
-        const nomeMarca = obterTextoCampo("campo-nome-marca-projeto", "Marca não informada");
+        assegurarIdsEstruturais();
+
+        const nomeMarca = obterNomeMarca("Marca não informada");
+        const numeroFranquia = obterTextoCampo("campo-numero-franquia", "Não informado");
+        const servidorMarca = obterTextoCampo("campo-servidor-marca", "Não informado");
+        const analistaProjeto = obterTextoCampo("campo-analista-projeto", "Não informado");
+        const analistasImplantacao = obterAnalistasImplantacao();
+        const ecsResponsavel = obterTextoCampo("campo-ecs-responsavel", "Não informado");
+        const qtdLojasInicial = obterTextoCampo("campo-qtd-lojas-inicial", "Não informado");
+        const descricaoOperacao = obterTextoCampo("campo-descricao-operacao", "Não informada");
+
         const dataGeracao = new Date().toLocaleString("pt-BR");
 
         const instrucoes = document.querySelector("#content-nivel1 .bg-blue-50 [contenteditable]");
@@ -919,11 +1133,40 @@
           ? instrucoes.textContent.trim().replace(/\s+/g, " ").replace(/^Instruções:\s*/i, "")
           : "";
 
-        const tabelaModulos = tabelaParaWikiMarkup(document.getElementById("tabela-ecossistema-modulos"), { colunasStatus: { 1: resolverCorStatus } });
-        const listaPontosCriticos = listaParaWikiMarkup(document.getElementById("lista-pontos-criticos"));
-        const tabelaDadosTecnicos = listaRotuloValorParaWikiMarkup(document.getElementById("lista-dados-tecnicos"));
-        const tabelaHardware = tabelaParaWikiMarkup(document.getElementById("tabela-hardware-padrao"));
-        const tabelaRegras = tabelaParaWikiMarkup(document.getElementById("tabela-regras-negocio"));
+        const tabelaVisaoGeral = [
+          `||Grupo||Item||Valor||`,
+          `|*Informações da Marca*|Marca / Projeto|${escaparWikiMarkup(nomeMarca)}|`,
+          `| |Número da Franquia|${escaparWikiMarkup(numeroFranquia)}|`,
+          `| |Servidor|${escaparWikiMarkup(servidorMarca)}|`,
+          `|*Responsáveis TOTVS*|Analista de Projeto|${escaparWikiMarkup(analistaProjeto)}|`,
+          `| |Analistas de Implantação|${escaparWikiMarkup(analistasImplantacao)}|`,
+          `| |ECS Responsável|${escaparWikiMarkup(ecsResponsavel)}|`,
+          `|*Escopo*|Qtd. Lojas Inicial|${escaparWikiMarkup(qtdLojasInicial)}|`,
+        ].join("\n");
+
+        const painelDescricaoOperacao = [
+          `{panel:title=Descrição da Operação}`,
+          escaparWikiMarkup(descricaoOperacao),
+          `{panel}`,
+        ].join("\n");
+
+        const nivel1El = document.getElementById("content-nivel1");
+        const elModulos = obterElementoSecao("tabela-ecossistema-modulos", "módulos", "table", nivel1El);
+        const tabelaModulos = tabelaParaWikiMarkup(elModulos, { colunasStatus: { 1: resolverCorStatus } });
+
+        const elPontosCriticos = obterElementoSecao("lista-pontos-criticos", "pontos críticos", "ol, ul", nivel1El);
+        const listaPontosCriticos = listaParaWikiMarkup(elPontosCriticos);
+
+        const elDadosTecnicos = obterElementoSecao("lista-dados-tecnicos", "dados técnicos", "#lista-dados-tecnicos, .space-y-3, div:has(> div)", nivel1El);
+        const tabelaDadosTecnicos = listaRotuloValorParaWikiMarkup(elDadosTecnicos);
+
+        const elHardware = obterElementoSecao("tabela-hardware-padrao", "infraestrutura", "table", nivel1El)
+          || obterElementoSecao(null, "hardware", "table", nivel1El);
+        const tabelaHardware = tabelaParaWikiMarkup(elHardware);
+
+        const elRegras = obterElementoSecao("tabela-regras-negocio", "regras de negócio", "table", nivel1El)
+          || obterElementoSecao(null, "permissões", "table", nivel1El);
+        const tabelaRegras = tabelaParaWikiMarkup(elRegras);
 
         return [
           `h1. 📌 Mapeamento de Marca — Nível 1: Padrão da Marca`,
@@ -932,8 +1175,14 @@
           `_Documento gerado em ${dataGeracao}_`,
           ``,
           `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
-          textoInstrucoes || "Este documento define as configurações padrão da rede.",
+          textoInstrucoes || "Este documento define as configurações padrão da rede. Todas as lojas assumem estas configurações, a menos que haja uma exceção registrada no documento de Nível 2.",
           `{panel}`,
+          ``,
+          `h2. 📋 Visão Geral do Projeto`,
+          ``,
+          tabelaVisaoGeral,
+          ``,
+          painelDescricaoOperacao,
           ``,
           `h2. 📦 Ecossistema de Módulos e Sistemas`,
           ``,
@@ -1035,7 +1284,9 @@
 
       // Monta o texto completo em Wiki Markup do Nível 2 (Exceções e Rollout).
       function gerarWikiMarkupNivel2() {
-        const nomeMarca = obterTextoCampo("campo-nome-marca-projeto", "Marca não informada");
+        assegurarIdsEstruturais();
+
+        const nomeMarca = obterNomeMarca("Marca não informada");
         const dataGeracao = new Date().toLocaleString("pt-BR");
 
         const instrucoes = document.querySelector("#content-nivel2 .bg-blue-50 [contenteditable]");
@@ -1053,12 +1304,22 @@
           `|*${totalLojas}*|{status:colour=Green|title=${lojasPadrao}}|{status:colour=Yellow|title=${comExcecoes}}|{status:colour=Blue|title=${emImplantacao}}|`,
         ].join("\n");
 
-        const tabelaQuickView = tabelaParaWikiMarkup(document.getElementById("tabela-quickview"), {
+        const nivel2El = document.getElementById("content-nivel2");
+        const elQuickView = obterElementoSecao("tabela-quickview", "quick-view", "table", nivel2El)
+          || obterElementoSecao(null, "lojas ativas", "table", nivel2El);
+
+        const tabelaQuickView = tabelaParaWikiMarkup(elQuickView, {
           colunasStatus: { 3: resolverCorStatus, 4: resolverCorExcecao },
           colunasIgnorar: [5],
         });
 
-        const cards = Array.from(document.querySelectorAll("#container-excecoes > div"));
+        const containerExcecoes = document.getElementById("container-excecoes")
+          || (nivel2El ? nivel2El.querySelector("#container-excecoes, div:has(> div[id^='loja-'])") : null);
+        const cards = Array.from(
+          containerExcecoes
+            ? containerExcecoes.children
+            : document.querySelectorAll("#content-nivel2 div[id^='loja-']")
+        );
         const excecoesWikiMarkup = cards.length
           ? cards.map(cardExcecaoParaWikiMarkup).join("\n\n")
           : "_Nenhuma exceção registrada até o momento._";
@@ -1391,6 +1652,40 @@
         return doc.body.innerHTML;
       }
 
+      // Restaura o conteúdo do documento com segurança por aba.
+      // Se um rascunho salvo contiver apenas uma das abas (ex.: rascunho
+      // legado que só continha o Nível 2), a outra aba é PRESERVADA e NÃO
+      // destruída pelo carregamento. Após aplicar o HTML, reinjeta quaisquer
+      // IDs estruturais essenciais que faltem.
+      function restaurarConteudoDocumento(htmlRestaurado) {
+        const container = document.getElementById("documento-container");
+        if (!container || !htmlRestaurado) return;
+
+        const htmlSanitizado = sanitizarHTMLDocumento(htmlRestaurado);
+        const tempDoc = new DOMParser().parseFromString(htmlSanitizado, "text/html");
+
+        const nivel1Novo = tempDoc.getElementById("content-nivel1");
+        const nivel2Novo = tempDoc.getElementById("content-nivel2");
+
+        const nivel1Atual = document.getElementById("content-nivel1");
+        const nivel2Atual = document.getElementById("content-nivel2");
+
+        if (nivel1Novo && nivel2Novo && nivel1Atual && nivel2Atual) {
+          nivel1Atual.innerHTML = nivel1Novo.innerHTML;
+          nivel2Atual.innerHTML = nivel2Novo.innerHTML;
+        } else if (nivel1Novo && !nivel2Novo && nivel1Atual) {
+          nivel1Atual.innerHTML = nivel1Novo.innerHTML;
+        } else if (!nivel1Novo && nivel2Novo && nivel2Atual) {
+          // Traz apenas o Nível 2: atualiza o Nível 2 e PRESERVA o Nível 1
+          nivel2Atual.innerHTML = nivel2Novo.innerHTML;
+        } else {
+          // Fallback para caso o HTML salvo seja a raiz direta
+          container.innerHTML = htmlSanitizado;
+        }
+
+        assegurarIdsEstruturais();
+      }
+
       // Persistência de dados no Google Apps Script
       function obterEstadoGeralJSON() {
         // Sincroniza textarea.value -> textContent SEM disparar o observador
@@ -1488,6 +1783,7 @@
 
       function carregarEstadoGoogle() {
         if (typeof google === "undefined" || !google.script) {
+          assegurarIdsEstruturais();
           iniciarObservadorDeAlteracoes();
           return;
         }
@@ -1502,7 +1798,7 @@
                 const container = document.getElementById("documento-container");
 
                 if (dados.conteudoHTML && container) {
-                  container.innerHTML = sanitizarHTMLDocumento(dados.conteudoHTML);
+                  restaurarConteudoDocumento(dados.conteudoHTML);
 
                   document.querySelectorAll("textarea").forEach((ta) => {
                     ta.value = ta.textContent;
@@ -1515,11 +1811,13 @@
                 console.error("Erro ao restaurar rascunho:", e);
               }
             }
+            assegurarIdsEstruturais();
             ocultarCarregando();
             iniciarObservadorDeAlteracoes();
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao carregar rascunho do Google Apps Script:", erro);
+            assegurarIdsEstruturais();
             ocultarCarregando();
             exibirErroSalvamento("Não foi possível carregar o rascunho salvo. Exibindo o modelo padrão.");
             iniciarObservadorDeAlteracoes();
@@ -1572,7 +1870,7 @@
           try {
             const dados = JSON.parse(e.target.result);
             if (dados.conteudoHTML) {
-              document.getElementById("documento-container").innerHTML = sanitizarHTMLDocumento(dados.conteudoHTML);
+              restaurarConteudoDocumento(dados.conteudoHTML);
 
               document.querySelectorAll("textarea").forEach((ta) => {
                 ta.value = ta.textContent;
@@ -1634,6 +1932,7 @@
 
       // Initializer
       document.addEventListener("DOMContentLoaded", () => {
+        assegurarIdsEstruturais();
         carregarEstadoGoogle();
         recalcularContadores();
 
