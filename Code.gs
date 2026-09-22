@@ -526,15 +526,16 @@ function listarProjetosComMigracao() {
 // diretamente contra a planilha, sem passar por Session.getActiveUser().
 //
 // Como rodar: no editor do Apps Script, selecione esta função no dropdown ao
-// lado do botão "Executar" e clique em "Executar". Depois abra
-// "Ver > Registros de execução" (ou Ctrl+Enter) para ver o resultado de cada
-// verificação. Ao final, o projeto de teste criado é excluído automaticamente.
+// lado do botão "Executar" (ou digite o nome abaixo) e clique em "Executar".
+// Depois abra "Ver > Registros de execução" (ou Ctrl+Enter) para ver o resultado
+// de cada verificação. Ao final, o projeto de teste criado é excluído
+// automaticamente.
 //
 // O que NÃO é coberto por este teste: se o deploy está configurado como
 // "Executar como: usuário que acessa" (isso só se confirma com uma segunda
 // conta Google acessando a URL publicada de verdade — ver README, seção
 // "Como publicar/rodar").
-function testarLogicaDeCompartilhamento_() {
+function testarLogicaDeCompartilhamento() {
   var meuEmail = obterUsuarioAtual();
   var colaboradorFicticio = 'colaborador.teste@totvs.com.br';
   var colaboradorMaiusculo = colaboradorFicticio.toUpperCase(); // valida case-insensitive
