@@ -69,80 +69,115 @@
                 </div>
             </div>
 
-            <!-- Navegação de Abas -->
+            <!-- Navegação principal: Home / Meus Projetos (sempre visíveis) -->
             <div class="space-y-1">
-                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Navegação</span>
-                <button onclick="switchTab('nivel1')" id="tab-nivel1" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
-                  <i data-lucide="shield-check" class="w-4 h-4"></i>
-                  <span>Nível 1: Padrão</span>
+                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Início</span>
+                <button onclick="mostrarAreaHome()" id="nav-home" class="area-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="home" class="w-4 h-4"></i>
+                  <span>Início</span>
                 </button>
-                <button onclick="switchTab('nivel2')" id="tab-nivel2" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
-                  <i data-lucide="git-branch" class="w-4 h-4"></i>
-                  <span>Nível 2: Exceções</span>
+                <button onclick="mostrarAreaProjetos()" id="nav-projetos" class="area-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                  <i data-lucide="folder-kanban" class="w-4 h-4"></i>
+                  <span>Meus Projetos</span>
                 </button>
             </div>
 
             <hr class="border-slate-200" />
 
-            <!-- Bloco de Ações do Projeto (Persistência e Backup) -->
-            <div class="space-y-1">
-                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Projeto & Dados</span>
-                
-                <!-- Input oculto para upload de JSON -->
-                <input type="file" id="input-importar-json" accept=".json" class="hidden" onchange="importarArquivoProjeto(event)">
+            <!-- Todo o bloco abaixo só é útil com um projeto aberto -->
+            <div id="sidebar-secoes-projeto" class="space-y-4 hidden">
 
-                <button onclick="document.getElementById('input-importar-json').click()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
-                  <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
-                  <span>Abrir Projeto (.json)</span>
+              <!-- Indicador do projeto atualmente aberto -->
+              <div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                <p id="sidebar-nome-projeto-atual" class="text-xs font-bold text-blue-900 truncate">—</p>
+                <p id="sidebar-papel-projeto-atual" class="text-[10px] text-blue-700 mt-0.5">—</p>
+                <button onclick="voltarParaProjetos()" class="text-[10px] text-blue-600 hover:underline mt-1 flex items-center gap-1">
+                  <i data-lucide="arrow-left-right" class="w-3 h-3"></i>
+                  Trocar de projeto
                 </button>
+              </div>
 
-                <button onclick="exportarArquivoProjeto()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
-                  <i data-lucide="save" class="w-4 h-4 text-slate-500"></i>
-                  <span>Salvar Projeto (.json)</span>
-                </button>
-            </div>
+              <!-- Navegação de Abas -->
+              <div class="space-y-1">
+                  <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Navegação</span>
+                  <button onclick="switchTab('nivel1')" id="tab-nivel1" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                    <span>Nível 1: Padrão</span>
+                  </button>
+                  <button onclick="switchTab('nivel2')" id="tab-nivel2" class="tab-button w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+                    <i data-lucide="git-branch" class="w-4 h-4"></i>
+                    <span>Nível 2: Exceções</span>
+                  </button>
+              </div>
 
-            <hr class="border-slate-200" />
+              <hr class="border-slate-200" />
 
-            <!-- Bloco de Exportação de HTML (Jira) -->
-            <div class="space-y-1">
-                <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Exportar para Share Jira</span>
+              <!-- Bloco de Ações do Projeto (Persistência e Backup) -->
+              <div class="space-y-1" data-requer-edicao="true">
+                  <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Projeto & Dados</span>
 
-                <!-- Ocultos: a exportação em HTML "limpo" perde quase todo o design
-                     original ao ser colada no Confluence (ver decisão registrada em
-                     sessão). As funções copiarHTMLJira()/baixarHTML() continuam no
-                     código para uma eventual reativação futura. -->
-                <button onclick="copiarHTMLJira()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors">
-                  <i data-lucide="code" class="w-4 h-4"></i>
-                  <span>Copiar HTML Limpo</span>
-                </button>
+                  <!-- Input oculto para upload de JSON -->
+                  <input type="file" id="input-importar-json" accept=".json" class="hidden" onchange="importarArquivoProjeto(event)">
 
-                <button onclick="baixarHTML()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-900 text-white shadow-sm transition-colors">
-                  <i data-lucide="download" class="w-4 h-4"></i>
-                  <span>Baixar .html</span>
-                </button>
+                  <button onclick="document.getElementById('input-importar-json').click()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                    <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
+                    <span>Importar Backup (.json)</span>
+                  </button>
 
-                <button onclick="copiarWikiMarkupNivel1()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
-                  <i data-lucide="file-code-2" class="w-4 h-4"></i>
-                  <span>Copiar Wiki Markup (Nível 1)</span>
-                </button>
+                  <button onclick="exportarArquivoProjeto()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                    <i data-lucide="save" class="w-4 h-4 text-slate-500"></i>
+                    <span>Baixar Backup (.json)</span>
+                  </button>
 
-                <button onclick="copiarWikiMarkupNivel2()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors">
-                  <i data-lucide="file-code-2" class="w-4 h-4"></i>
-                  <span>Copiar Wiki Markup (Nível 2)</span>
-                </button>
+                  <button onclick="abrirModalCompartilhar()" id="btn-compartilhar-sidebar" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors hidden">
+                    <i data-lucide="users" class="w-4 h-4 text-slate-500"></i>
+                    <span>Compartilhar este projeto</span>
+                  </button>
+              </div>
+
+              <hr class="border-slate-200" data-requer-edicao="true" />
+
+              <!-- Bloco de Exportação de HTML (Jira) -->
+              <div class="space-y-1" data-requer-edicao="true">
+                  <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Exportar para Share Jira</span>
+
+                  <!-- Ocultos: a exportação em HTML "limpo" perde quase todo o design
+                       original ao ser colada no Confluence (ver decisão registrada em
+                       sessão). As funções copiarHTMLJira()/baixarHTML() continuam no
+                       código para uma eventual reativação futura. -->
+                  <button onclick="copiarHTMLJira()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors">
+                    <i data-lucide="code" class="w-4 h-4"></i>
+                    <span>Copiar HTML Limpo</span>
+                  </button>
+
+                  <button onclick="baixarHTML()" class="hidden w-full items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-900 text-white shadow-sm transition-colors">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>Baixar .html</span>
+                  </button>
+
+                  <button onclick="copiarWikiMarkupNivel1()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
+                    <i data-lucide="file-code-2" class="w-4 h-4"></i>
+                    <span>Copiar Wiki Markup (Nível 1)</span>
+                  </button>
+
+                  <button onclick="copiarWikiMarkupNivel2()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors">
+                    <i data-lucide="file-code-2" class="w-4 h-4"></i>
+                    <span>Copiar Wiki Markup (Nível 2)</span>
+                  </button>
+              </div>
+
             </div>
           </div>
 
           <!-- Rodapé da Sidebar -->
-          <div class="border-t border-slate-100 pt-3 space-y-2">
-            <div class="text-[11px] text-slate-400 flex items-center gap-2">
+          <div id="sidebar-rodape-projeto" class="border-t border-slate-100 pt-3 space-y-2 hidden">
+            <div id="sidebar-status-auto-save" class="text-[11px] text-slate-400 flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>Auto-save Google ativo</span>
+              <span>Auto-save ativo</span>
             </div>
-            <button onclick="limparRascunhoGoogle()" class="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+            <button onclick="limparRascunhoGoogle()" data-requer-edicao="true" class="text-[10px] text-red-500 hover:underline flex items-center gap-1">
               <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
-              Resetar modelo padrão
+              Resetar este projeto para o modelo padrão
             </button>
           </div>
 
@@ -151,6 +186,79 @@
 
     <!-- Main Container (AJUSTADO PARA sm:ml-64 PARA NÃO COBRIR O CONTEÚDO) -->
     <div class="p-4 sm:ml-64">
+
+        <!-- ========================================== -->
+        <!-- ÁREA: HOME (dashboard inicial)             -->
+        <!-- ========================================== -->
+        <div id="area-home" class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
+          <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="store" class="w-5 h-5 text-blue-600"></i>
+              Mapeamento de Marcas — TOTVS Linx
+            </h1>
+            <p class="text-sm text-slate-500 mt-2">
+              Documente o padrão de rede (Nível 1) e as exceções por loja (Nível 2) de cada cliente. Projetos agora podem
+              ser compartilhados com o colega da dupla de implantação (edição ou apenas leitura).
+            </p>
+            <div class="flex flex-wrap gap-3 mt-4">
+              <button onclick="criarNovoProjeto()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                Criar novo projeto
+              </button>
+              <button onclick="mostrarAreaProjetos()" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                <i data-lucide="folder-kanban" class="w-4 h-4"></i>
+                Ver todos os projetos
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div class="border-b border-slate-200 bg-slate-50/50 px-6 py-3 flex items-center justify-between">
+              <h2 class="text-sm font-semibold text-slate-900">Projetos recentes</h2>
+            </div>
+            <div id="lista-projetos-recentes" class="divide-y divide-slate-100">
+              <div class="px-6 py-6 text-sm text-slate-400 text-center">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ÁREA: LISTA DE PROJETOS                     -->
+        <!-- ========================================== -->
+        <div id="area-projetos" class="hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h1 class="text-lg font-bold text-slate-900">📁 Meus Projetos</h1>
+            <button onclick="criarNovoProjeto()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              Novo Projeto
+            </button>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div id="lista-projetos" class="divide-y divide-slate-100">
+              <div class="px-6 py-6 text-sm text-slate-400 text-center">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ÁREA: PROJETO ABERTO (editor)                -->
+        <!-- ========================================== -->
+        <div id="area-projeto-atual" class="hidden">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p id="cabecalho-nome-projeto" class="text-sm font-bold text-slate-900">—</p>
+                <p id="cabecalho-info-atualizacao" class="text-[11px] text-slate-400">—</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="badge-modo-leitura" class="hidden text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Somente leitura</span>
+                <button onclick="voltarParaProjetos()" class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                  <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                  Meus Projetos
+                </button>
+              </div>
+            </div>
+          </div>
         <main
         class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4"
         id="documento-container"
@@ -199,6 +307,10 @@
                           <div>
                             <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Servidor</span>
                             <span id="campo-servidor-marca" contenteditable="true" class="text-slate-900 font-medium text-sm block">[Ex: Produção / Varejo]</span>
+                          </div>
+                          <div>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Contato Franqueadora</span>
+                            <span id="campo-contato-franqueadora" contenteditable="true" class="text-slate-900 font-medium text-sm block">[Nome / Telefone / E-mail]</span>
                           </div>
                         </div>
                     </div>
@@ -404,7 +516,7 @@
             <!-- Flow & Infra Split -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <!-- Jornada de Venda -->
-              <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
+              <section id="secao-jornada-venda" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
                   <div>
                     <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2 mb-4">
                         <i data-lucide="refresh-cw" class="w-5 h-5 text-blue-600"></i>
@@ -429,7 +541,7 @@
                     </div>
                   </div>
 
-                  <ul class="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-4">
+                  <ul id="lista-parametros-jornada" class="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-4">
                     <li class="flex items-center gap-2">
                         <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
                         <span contenteditable="true"><strong>Horário Padrão:</strong> 10h00 às 22h00</span>
@@ -691,7 +803,41 @@
             </section>
         </div>
         </main>
+        </div>
+        <!-- fim de #area-projeto-atual -->
      </div>
+
+    <!-- MODAL: Compartilhar Projeto -->
+    <div id="modal-compartilhar" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="users" class="w-4 h-4 text-blue-600"></i>
+            Compartilhar projeto
+          </h3>
+          <button onclick="fecharModalCompartilhar()" class="text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <p id="modal-compartilhar-nome-projeto" class="text-xs text-slate-500 -mt-2">—</p>
+
+        <div id="modal-compartilhar-lista-atual" class="space-y-2 max-h-48 overflow-y-auto">
+          <!-- colaboradores atuais, gerados via JS -->
+        </div>
+
+        <div class="border-t border-slate-100 pt-4 space-y-2">
+          <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Adicionar colaborador</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="modal-compartilhar-email" type="email" placeholder="email@totvs.com.br" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select id="modal-compartilhar-papel" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
+              <option value="edicao">Pode editar</option>
+              <option value="visualizacao">Somente leitura</option>
+            </select>
+            <button onclick="adicionarColaborador()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors">Adicionar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- NOTIFICAÇÃO TOAST -->
     <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl hidden flex items-center gap-3 z-50">
@@ -948,6 +1094,7 @@
             { id: "campo-nome-marca-projeto", termos: ["nome da marca", "marca / projeto"] },
             { id: "campo-numero-franquia", termos: ["número da franquia", "numero da franquia", "franquia"] },
             { id: "campo-servidor-marca", termos: ["servidor"] },
+            { id: "campo-contato-franqueadora", termos: ["nome / cargo / telefone / email"] },
             { id: "campo-analista-projeto", termos: ["analista de projeto"] },
             { id: "campo-analistas-implantacao", termos: ["analistas de implantação", "analistas de implantacao"] },
             { id: "campo-ecs-responsavel", termos: ["ecs responsável", "ecs responsavel"] },
@@ -994,6 +1141,20 @@
             const el = obterElementoSecao(null, "regras de negócio", "table", nivel1)
               || obterElementoSecao(null, "permissões", "table", nivel1);
             if (el) el.id = "tabela-regras-negocio";
+          }
+          if (!document.getElementById("fluxo-venda")) {
+            const ta = nivel1.querySelector("textarea");
+            if (ta) ta.id = "fluxo-venda";
+          }
+          if (!document.getElementById("secao-jornada-venda")) {
+            const el = obterElementoSecao(null, "jornada de venda", "section", nivel1)
+              || nivel1.querySelector("section:has(#fluxo-venda)");
+            if (el) el.id = "secao-jornada-venda";
+          }
+          if (!document.getElementById("lista-parametros-jornada")) {
+            const secaoJornada = document.getElementById("secao-jornada-venda") || nivel1.querySelector("section:has(#fluxo-venda)");
+            const ul = secaoJornada ? secaoJornada.querySelector("ul") : null;
+            if (ul) ul.id = "lista-parametros-jornada";
           }
         }
 
@@ -1111,6 +1272,71 @@
         return linhas.length > 1 ? linhas.join("\n") : "";
       }
 
+      // Converte a seção "Jornada de Venda e Fluxo" em Wiki Markup:
+      // 1. O diagrama ASCII do fluxo (com suas setas e caixas) é inserido
+      //    na macro {code:title=Diagrama do Fluxo de Venda} do Confluence,
+      //    preservando fonte monoespaçada e alinhamento visual exato, sem
+      //    escapar caracteres de controle que poluiriam o diagrama.
+      // 2. Os parâmetros operacionais da jornada (horários, usuários, turnos)
+      //    são extraídos da lista e formatados em uma tabela Confluence limpa.
+      function jornadaVendaParaWikiMarkup() {
+        const nivel1El = document.getElementById("content-nivel1");
+        const ta = document.getElementById("fluxo-venda")
+          || (nivel1El ? nivel1El.querySelector("textarea") : null);
+        const secao = document.getElementById("secao-jornada-venda")
+          || (ta ? ta.closest("section") : null)
+          || obterElementoSecao(null, "jornada de venda", "section", nivel1El);
+
+        const blocos = [];
+
+        // 1. Diagrama em ASCII monoespaçado
+        const fluxoTexto = ta ? (ta.value || ta.textContent || "").trim() : "";
+        if (fluxoTexto) {
+          blocos.push(`{code:title=Diagrama do Fluxo de Venda}\n${fluxoTexto}\n{code}`);
+        }
+
+        // 2. Parâmetros operacionais
+        const ul = document.getElementById("lista-parametros-jornada")
+          || (secao ? secao.querySelector("ul") : null);
+        if (ul) {
+          const linhas = ["||Parâmetro Operacional||Configuração Padrão||"];
+          Array.from(ul.querySelectorAll("li")).forEach((li) => {
+            const strong = li.querySelector("strong");
+            let rotulo = "";
+            let valor = "";
+
+            if (strong) {
+              rotulo = strong.textContent.trim().replace(/:$/, "");
+              const clone = li.cloneNode(true);
+              const sNoClone = clone.querySelector("strong");
+              if (sNoClone) sNoClone.remove();
+              clone.querySelectorAll("svg, i").forEach((el) => el.remove());
+              valor = clone.textContent.trim();
+            } else {
+              const texto = li.textContent.trim();
+              if (texto.includes(":")) {
+                const [r, ...v] = texto.split(":");
+                rotulo = r.trim();
+                valor = v.join(":").trim();
+              } else {
+                rotulo = "Item";
+                valor = texto;
+              }
+            }
+
+            if (rotulo || valor) {
+              linhas.push(`|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`);
+            }
+          });
+
+          if (linhas.length > 1) {
+            blocos.push(linhas.join("\n"));
+          }
+        }
+
+        return blocos.join("\n\n");
+      }
+
       // Monta o texto completo em Wiki Markup do Nível 1 (Padrão da Marca).
       function gerarWikiMarkupNivel1() {
         assegurarIdsEstruturais();
@@ -1118,6 +1344,7 @@
         const nomeMarca = obterNomeMarca("Marca não informada");
         const numeroFranquia = obterTextoCampo("campo-numero-franquia", "Não informado");
         const servidorMarca = obterTextoCampo("campo-servidor-marca", "Não informado");
+        const contatoFranqueadora = obterTextoCampo("campo-contato-franqueadora", "Não informado");
         const analistaProjeto = obterTextoCampo("campo-analista-projeto", "Não informado");
         const analistasImplantacao = obterAnalistasImplantacao();
         const ecsResponsavel = obterTextoCampo("campo-ecs-responsavel", "Não informado");
@@ -1138,6 +1365,7 @@
           `|*Informações da Marca*|Marca / Projeto|${escaparWikiMarkup(nomeMarca)}|`,
           `| |Número da Franquia|${escaparWikiMarkup(numeroFranquia)}|`,
           `| |Servidor|${escaparWikiMarkup(servidorMarca)}|`,
+          `| |Contato Franqueadora|${escaparWikiMarkup(contatoFranqueadora)}|`,
           `|*Responsáveis TOTVS*|Analista de Projeto|${escaparWikiMarkup(analistaProjeto)}|`,
           `| |Analistas de Implantação|${escaparWikiMarkup(analistasImplantacao)}|`,
           `| |ECS Responsável|${escaparWikiMarkup(ecsResponsavel)}|`,
@@ -1157,6 +1385,11 @@
         const elPontosCriticos = obterElementoSecao("lista-pontos-criticos", "pontos críticos", "ol, ul", nivel1El);
         const listaPontosCriticos = listaParaWikiMarkup(elPontosCriticos);
 
+        const blocoJornadaVenda = jornadaVendaParaWikiMarkup();
+        const secaoJornadaMarkup = blocoJornadaVenda
+          ? [`h2. 🔄 Jornada de Venda e Fluxo`, ``, blocoJornadaVenda, ``]
+          : [];
+
         const elDadosTecnicos = obterElementoSecao("lista-dados-tecnicos", "dados técnicos", "#lista-dados-tecnicos, .space-y-3, div:has(> div)", nivel1El);
         const tabelaDadosTecnicos = listaRotuloValorParaWikiMarkup(elDadosTecnicos);
 
@@ -1169,9 +1402,9 @@
         const tabelaRegras = tabelaParaWikiMarkup(elRegras);
 
         return [
-          `h1. 📌 Mapeamento de Marca — Nível 1: Padrão da Marca`,
+          `h1. 📌 Mapeamento de Marca — Nível 1: Padrão da Franquia`,
           ``,
-          `*Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
+          `h2. *Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
           `_Documento gerado em ${dataGeracao}_`,
           ``,
           `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
@@ -1194,6 +1427,7 @@
           listaPontosCriticos,
           `{warning}`,
           ``,
+          ...secaoJornadaMarkup,
           `h2. 🔒 Dados Técnicos e Acessos Globais`,
           ``,
           `{note:title=Informações restritas à equipe de Implantação e Suporte}`,
@@ -1761,16 +1995,336 @@
         });
       }
 
+      // --- Projetos: estado da sessão e navegação entre áreas ---------------
+      // PROJETO_ATUAL guarda os metadados do projeto aberto (id, nome, dono,
+      // colaboradores e o papel do usuário atual nele: "dono" | "edicao" |
+      // "visualizacao"). Enquanto nenhum projeto está aberto, PROJETO_ATUAL é
+      // null e as chamadas de auto-save/observador ficam inativas.
+      let PROJETO_ATUAL = null;
+      let PROJETO_COMPARTILHAR_ID = null;
+
+      function mostrarArea(nomeArea) {
+        ["area-home", "area-projetos", "area-projeto-atual"].forEach((id) => {
+          document.getElementById(id).classList.toggle("hidden", id !== nomeArea);
+        });
+        document.querySelectorAll(".area-button").forEach((btn) => btn.classList.remove("tab-active"));
+        if (nomeArea === "area-home") document.getElementById("nav-home").classList.add("tab-active");
+        if (nomeArea === "area-projetos") document.getElementById("nav-projetos").classList.add("tab-active");
+
+        document.getElementById("sidebar-secoes-projeto").classList.toggle("hidden", nomeArea !== "area-projeto-atual");
+        document.getElementById("sidebar-rodape-projeto").classList.toggle("hidden", nomeArea !== "area-projeto-atual");
+        fecharSidebarMobile();
+      }
+
+      function mostrarAreaHome() {
+        mostrarArea("area-home");
+        carregarListaProjetos();
+      }
+
+      function mostrarAreaProjetos() {
+        mostrarArea("area-projetos");
+        carregarListaProjetos();
+      }
+
+      function formatarDataHora(isoString) {
+        if (!isoString) return "—";
+        try {
+          return new Date(isoString).toLocaleString("pt-BR");
+        } catch (e) {
+          return isoString;
+        }
+      }
+
+      function rotuloPapel(papel) {
+        if (papel === "dono") return { texto: "Dono", classe: "bg-blue-100 text-blue-800" };
+        if (papel === "edicao") return { texto: "Pode editar", classe: "bg-emerald-100 text-emerald-800" };
+        return { texto: "Somente leitura", classe: "bg-amber-100 text-amber-800" };
+      }
+
+      function linhaProjetoHTML(projeto) {
+        const papel = rotuloPapel(projeto.meuPapel);
+        const acoesDono =
+          projeto.meuPapel === "dono"
+            ? `<button onclick="abrirModalCompartilhar('${projeto.id}')" class="text-xs font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1">
+                 <i data-lucide="users" class="w-3.5 h-3.5"></i> Compartilhar
+               </button>
+               <button onclick="excluirProjetoUI('${projeto.id}', '${(projeto.nome || "").replace(/'/g, "\\'")}')" class="text-xs font-medium text-red-500 hover:text-red-700 flex items-center gap-1">
+                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Excluir
+               </button>`
+            : "";
+
+        return `
+          <div class="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-slate-900 truncate">${projeto.nome}</p>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${papel.classe}">${papel.texto}</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                Dono: ${projeto.dono} · Atualizado em ${formatarDataHora(projeto.atualizadoEm)}${projeto.atualizadoPor ? " por " + projeto.atualizadoPor : ""}
+              </p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              ${acoesDono}
+              <button onclick="abrirProjetoNaTela('${projeto.id}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">Abrir</button>
+            </div>
+          </div>`;
+      }
+
+      function carregarListaProjetos() {
+        if (typeof google === "undefined" || !google.script) return;
+
+        google.script.run
+          .withSuccessHandler((projetos) => {
+            const listaCompleta = document.getElementById("lista-projetos");
+            const listaRecentes = document.getElementById("lista-projetos-recentes");
+
+            if (!projetos || projetos.length === 0) {
+              const vazio = '<div class="px-6 py-8 text-sm text-slate-400 text-center">Nenhum projeto ainda. Crie o primeiro com o botão acima.</div>';
+              if (listaCompleta) listaCompleta.innerHTML = vazio;
+              if (listaRecentes) listaRecentes.innerHTML = vazio;
+              return;
+            }
+
+            if (listaCompleta) listaCompleta.innerHTML = projetos.map(linhaProjetoHTML).join("");
+            if (listaRecentes) listaRecentes.innerHTML = projetos.slice(0, 5).map(linhaProjetoHTML).join("");
+
+            if (window.lucide) lucide.createIcons();
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao listar projetos:", erro);
+            exibirErroSalvamento("Não foi possível carregar a lista de projetos.");
+          })
+          .listarProjetosComMigracao();
+      }
+
+      function criarNovoProjeto() {
+        const nome = prompt("Nome do novo projeto (ex.: nome da marca/cliente):");
+        if (nome === null) return; // cancelado
+        if (typeof google === "undefined" || !google.script) return;
+
+        google.script.run
+          .withSuccessHandler((projeto) => {
+            aplicarProjetoNaTela(projeto, null);
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao criar projeto:", erro);
+            exibirErroSalvamento("Falha ao criar o projeto. Tente novamente.");
+          })
+          .criarProjeto(nome);
+      }
+
+      function excluirProjetoUI(id, nome) {
+        if (!confirm(`Excluir definitivamente o projeto "${nome}"? Esta ação não pode ser desfeita.`)) return;
+
+        google.script.run
+          .withSuccessHandler(() => {
+            if (PROJETO_ATUAL && PROJETO_ATUAL.id === id) {
+              PROJETO_ATUAL = null;
+              mostrarAreaProjetos();
+            } else {
+              carregarListaProjetos();
+            }
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao excluir projeto:", erro);
+            exibirErroSalvamento("Falha ao excluir o projeto: " + erro.message);
+          })
+          .excluirProjeto(id);
+      }
+
+      // Abre um projeto: busca metadados + conteúdo no backend e então
+      // aplica o resultado na tela.
+      function abrirProjetoNaTela(id) {
+        if (typeof google === "undefined" || !google.script) return;
+
+        exibirCarregando();
+        google.script.run
+          .withSuccessHandler((resultado) => {
+            aplicarProjetoNaTela(resultado.projeto, resultado.conteudoJson);
+          })
+          .withFailureHandler((erro) => {
+            ocultarCarregando();
+            console.error("Erro ao abrir projeto:", erro);
+            exibirErroSalvamento("Não foi possível abrir este projeto: " + erro.message);
+          })
+          .abrirProjeto(id);
+      }
+
+      function aplicarProjetoNaTela(projeto, conteudoJson) {
+        PROJETO_ATUAL = projeto;
+
+        // Projeto recém-criado (sem save ainda): mantém o modelo padrão já
+        // presente no HTML, sem tentar restaurar nada.
+        if (conteudoJson) {
+          try {
+            const dados = JSON.parse(conteudoJson);
+            if (dados.conteudoHTML) {
+              restaurarConteudoDocumento(dados.conteudoHTML);
+              document.querySelectorAll("textarea").forEach((ta) => (ta.value = ta.textContent));
+            }
+          } catch (e) {
+            console.error("Erro ao restaurar conteúdo do projeto:", e);
+          }
+        }
+
+        assegurarIdsEstruturais();
+        if (window.lucide) lucide.createIcons();
+        recalcularContadores();
+
+        atualizarCabecalhoProjeto();
+        aplicarModoSomenteLeitura(projeto.meuPapel === "visualizacao");
+
+        mostrarArea("area-projeto-atual");
+        switchTab("nivel1");
+
+        ocultarCarregando();
+        estadoAlterado = false;
+        iniciarObservadorDeAlteracoes();
+      }
+
+      function atualizarCabecalhoProjeto() {
+        if (!PROJETO_ATUAL) return;
+        const papel = rotuloPapel(PROJETO_ATUAL.meuPapel);
+
+        document.getElementById("cabecalho-nome-projeto").textContent = PROJETO_ATUAL.nome;
+        document.getElementById("cabecalho-info-atualizacao").textContent =
+          `Atualizado em ${formatarDataHora(PROJETO_ATUAL.atualizadoEm)}` +
+          (PROJETO_ATUAL.atualizadoPor ? ` por ${PROJETO_ATUAL.atualizadoPor}` : "");
+
+        document.getElementById("sidebar-nome-projeto-atual").textContent = PROJETO_ATUAL.nome;
+        document.getElementById("sidebar-papel-projeto-atual").textContent = papel.texto;
+
+        document.getElementById("badge-modo-leitura").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
+        document.getElementById("btn-compartilhar-sidebar").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "dono");
+      }
+
+      // Bloqueia edição e exportações para colaboradores com papel
+      // "visualizacao": desliga contenteditable, desabilita textareas e
+      // oculta tudo marcado com data-requer-edicao (import/export JSON,
+      // exportações Wiki Markup, reset do projeto).
+      function aplicarModoSomenteLeitura(somenteLeitura) {
+        document.querySelectorAll("#documento-container [contenteditable='true']").forEach((el) => {
+          el.setAttribute("contenteditable", somenteLeitura ? "false" : "true");
+        });
+        document.querySelectorAll("#documento-container textarea").forEach((ta) => {
+          ta.readOnly = somenteLeitura;
+        });
+        document.querySelectorAll("[data-requer-edicao='true']").forEach((el) => {
+          el.classList.toggle("hidden", somenteLeitura);
+        });
+      }
+
+      function voltarParaProjetos() {
+        // Garante que nenhuma edição pendente seja perdida antes de sair.
+        if (estadoAlterado) autoSalvarNoGoogle();
+        if (observadorAlteracoes) observadorAlteracoes.disconnect();
+        PROJETO_ATUAL = null;
+        mostrarAreaProjetos();
+      }
+
+      // --- Compartilhamento --------------------------------------------------
+      function abrirModalCompartilhar(idOpcional) {
+        // Se chamado a partir da sidebar (sem argumento), usa o projeto aberto.
+        const id = idOpcional || (PROJETO_ATUAL && PROJETO_ATUAL.id);
+        if (!id) return;
+
+        PROJETO_COMPARTILHAR_ID = id;
+        document.getElementById("modal-compartilhar-email").value = "";
+
+        // Se for o projeto atualmente aberto, já temos os colaboradores em
+        // memória; senão, busca do backend antes de abrir o modal.
+        if (PROJETO_ATUAL && PROJETO_ATUAL.id === id) {
+          renderizarModalCompartilhar(PROJETO_ATUAL.nome, PROJETO_ATUAL.colaboradores || []);
+          document.getElementById("modal-compartilhar").classList.remove("hidden");
+        } else {
+          google.script.run
+            .withSuccessHandler((resultado) => {
+              renderizarModalCompartilhar(resultado.projeto.nome, resultado.projeto.colaboradores || []);
+              document.getElementById("modal-compartilhar").classList.remove("hidden");
+            })
+            .withFailureHandler((erro) => exibirErroSalvamento("Não foi possível abrir o compartilhamento: " + erro.message))
+            .abrirProjeto(id);
+        }
+      }
+
+      function renderizarModalCompartilhar(nomeProjeto, colaboradores) {
+        document.getElementById("modal-compartilhar-nome-projeto").textContent = `Projeto: ${nomeProjeto}`;
+        const lista = document.getElementById("modal-compartilhar-lista-atual");
+
+        if (!colaboradores || colaboradores.length === 0) {
+          lista.innerHTML = '<p class="text-xs text-slate-400">Ainda não compartilhado com ninguém.</p>';
+        } else {
+          lista.innerHTML = colaboradores
+            .map((c) => {
+              const papel = rotuloPapel(c.papel);
+              return `<div class="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2">
+                        <span class="truncate">${c.email}</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${papel.classe}">${papel.texto}</span>
+                          <button onclick="removerColaboradorUI('${c.email}')" class="text-red-500 hover:text-red-700"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                      </div>`;
+            })
+            .join("");
+        }
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function fecharModalCompartilhar() {
+        document.getElementById("modal-compartilhar").classList.add("hidden");
+        PROJETO_COMPARTILHAR_ID = null;
+      }
+
+      function adicionarColaborador() {
+        const email = document.getElementById("modal-compartilhar-email").value.trim();
+        const papel = document.getElementById("modal-compartilhar-papel").value;
+        if (!email || !PROJETO_COMPARTILHAR_ID) return;
+
+        google.script.run
+          .withSuccessHandler((colaboradores) => {
+            if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
+              PROJETO_ATUAL.colaboradores = colaboradores;
+              atualizarCabecalhoProjeto();
+            }
+            renderizarModalCompartilhar(document.getElementById("modal-compartilhar-nome-projeto").textContent.replace("Projeto: ", ""), colaboradores);
+            document.getElementById("modal-compartilhar-email").value = "";
+            carregarListaProjetos();
+          })
+          .withFailureHandler((erro) => exibirErroSalvamento("Falha ao compartilhar: " + erro.message))
+          .compartilharProjeto(PROJETO_COMPARTILHAR_ID, email, papel);
+      }
+
+      function removerColaboradorUI(email) {
+        if (!PROJETO_COMPARTILHAR_ID) return;
+        google.script.run
+          .withSuccessHandler((colaboradores) => {
+            if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
+              PROJETO_ATUAL.colaboradores = colaboradores;
+              atualizarCabecalhoProjeto();
+            }
+            renderizarModalCompartilhar(document.getElementById("modal-compartilhar-nome-projeto").textContent.replace("Projeto: ", ""), colaboradores);
+            carregarListaProjetos();
+          })
+          .withFailureHandler((erro) => exibirErroSalvamento("Falha ao remover colaborador: " + erro.message))
+          .removerColaborador(PROJETO_COMPARTILHAR_ID, email);
+      }
+
       function autoSalvarNoGoogle() {
         idTimeoutAutoSave = null;
 
         if (!estadoAlterado) return; // nada para salvar
+        if (!PROJETO_ATUAL) return; // nenhum projeto aberto (ex.: nas telas Home/Projetos)
+        if (PROJETO_ATUAL.meuPapel === "visualizacao") return; // sem permissão de edição
         if (typeof google === "undefined" || !google.script) return;
 
         const estadoJSON = obterEstadoGeralJSON();
         google.script.run
-          .withSuccessHandler(() => {
+          .withSuccessHandler((info) => {
             estadoAlterado = false;
+            PROJETO_ATUAL.atualizadoEm = info.atualizadoEm;
+            PROJETO_ATUAL.atualizadoPor = info.atualizadoPor;
+            atualizarCabecalhoProjeto();
             exibirIndicadorSalvo();
           })
           .withFailureHandler((erro) => {
@@ -1778,68 +2332,19 @@
             exibirErroSalvamento("Falha ao salvar seu progresso. Tentando novamente em breve...");
             // Mantém estadoAlterado = true para a rede de segurança tentar de novo.
           })
-          .salvarEstadoCompleto(estadoJSON);
-      }
-
-      function carregarEstadoGoogle() {
-        if (typeof google === "undefined" || !google.script) {
-          assegurarIdsEstruturais();
-          iniciarObservadorDeAlteracoes();
-          return;
-        }
-
-        exibirCarregando();
-
-        google.script.run
-          .withSuccessHandler((rascunhoJson) => {
-            if (rascunhoJson) {
-              try {
-                const dados = JSON.parse(rascunhoJson);
-                const container = document.getElementById("documento-container");
-
-                if (dados.conteudoHTML && container) {
-                  restaurarConteudoDocumento(dados.conteudoHTML);
-
-                  document.querySelectorAll("textarea").forEach((ta) => {
-                    ta.value = ta.textContent;
-                  });
-
-                  if (window.lucide) lucide.createIcons();
-                  recalcularContadores();
-                }
-              } catch (e) {
-                console.error("Erro ao restaurar rascunho:", e);
-              }
-            }
-            assegurarIdsEstruturais();
-            ocultarCarregando();
-            iniciarObservadorDeAlteracoes();
-          })
-          .withFailureHandler((erro) => {
-            console.error("Erro ao carregar rascunho do Google Apps Script:", erro);
-            assegurarIdsEstruturais();
-            ocultarCarregando();
-            exibirErroSalvamento("Não foi possível carregar o rascunho salvo. Exibindo o modelo padrão.");
-            iniciarObservadorDeAlteracoes();
-          })
-          .carregarEstadoCompleto();
+          .salvarProjetoAtual(PROJETO_ATUAL.id, estadoJSON);
       }
 
       function limparRascunhoGoogle() {
-        if (confirm("Deseja limpar o rascunho salvo na nuvem e voltar ao modelo padrão de fábrica?")) {
-          if (typeof google !== "undefined" && google.script) {
-            google.script.run
-              .withSuccessHandler(() => {
-                location.reload();
-              })
-              .withFailureHandler((erro) => {
-                console.error("Erro ao resetar rascunho:", erro);
-                exibirErroSalvamento("Falha ao limpar o rascunho na nuvem. Tente novamente.");
-              })
-              .resetarParaModeloPadrao();
-          } else {
-            location.reload();
-          }
+        if (!PROJETO_ATUAL) return;
+        if (confirm("Deseja limpar este projeto e voltar ao modelo padrão de fábrica? Isso afeta todos que têm acesso a ele.")) {
+          google.script.run
+            .withSuccessHandler(() => location.reload())
+            .withFailureHandler((erro) => {
+              console.error("Erro ao resetar projeto:", erro);
+              exibirErroSalvamento("Falha ao limpar o projeto: " + erro.message);
+            })
+            .resetarProjetoAtual(PROJETO_ATUAL.id);
         }
       }
 
@@ -1930,11 +2435,12 @@
         }
       }
 
-      // Initializer
+      // Initializer: a tela sempre começa pela Home. O documento (Nível
+      // 1/Nível 2) só é carregado quando o usuário abre um projeto
+      // específico (abrirProjetoNaTela), já que agora o mesmo login pode
+      // ter vários projetos, próprios ou compartilhados.
       document.addEventListener("DOMContentLoaded", () => {
-        assegurarIdsEstruturais();
-        carregarEstadoGoogle();
-        recalcularContadores();
+        mostrarAreaHome();
 
         // Rede de segurança: caso uma alteração pendente não tenha sido
         // salva pelo debounce (ex.: falha de rede pontual), tenta novamente
