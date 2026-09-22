@@ -412,6 +412,30 @@ function resetarProjetoAtual(projetoId) {
   return true;
 }
 
+// Renomeia um projeto. Exige papel "dono" ou "edicao".
+function renomearProjeto(projetoId, novoNome) {
+  var email = obterUsuarioAtual();
+  var abaProjetos = obterAba_(ABA_PROJETOS);
+  var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
+  var papel = determinarPapel_(linhaProjeto, email);
+
+  if (papel !== 'dono' && papel !== 'edicao') {
+    throw new Error('Você não tem permissão para renomear este projeto.');
+  }
+
+  var nomeFinal = (novoNome || '').trim();
+  if (!nomeFinal) {
+    throw new Error('Informe um nome válido para o projeto.');
+  }
+
+  abaProjetos.getRange(linhaProjeto.linha, 2).setValue(nomeFinal);
+  
+  var agora = new Date().toISOString();
+  abaProjetos.getRange(linhaProjeto.linha, 6, 1, 2).setValues([[agora, email]]);
+
+  return { nome: nomeFinal, atualizadoEm: agora, atualizadoPor: email };
+}
+
 // Concede (ou atualiza) o acesso de um colaborador. Só o dono pode chamar.
 function compartilharProjeto(projetoId, emailColaborador, papelConcedido) {
   var email = obterUsuarioAtual();

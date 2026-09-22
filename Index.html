@@ -252,21 +252,65 @@
         <!-- ÁREA: PROJETO ABERTO (editor)                -->
         <!-- ========================================== -->
         <div id="area-projeto-atual" class="hidden">
-          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-            <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p id="cabecalho-nome-projeto" class="text-sm font-bold text-slate-900">—</p>
-                <p id="cabecalho-info-atualizacao" class="text-[11px] text-slate-400">—</p>
+          <!-- TOP BAR: Nome editável, status de salvamento, ações -->
+          <div class="fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+              <!-- Esquerda: Voltar -->
+              <button onclick="voltarParaProjetos()" class="flex items-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2 py-1 rounded-lg transition-colors shrink-0">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span class="text-xs font-medium hidden sm:inline">Voltar</span>
+              </button>
+
+              <!-- Centro: Nome editável do projeto -->
+              <div class="flex-1 flex items-center justify-center min-w-0">
+                <div id="topbar-nome-container" class="flex items-center gap-2 cursor-pointer hover:bg-slate-100 px-3 py-2 rounded-lg transition-colors group">
+                  <input 
+                    id="topbar-nome-input" 
+                    type="text" 
+                    value="—" 
+                    class="hidden text-sm font-semibold text-slate-900 bg-white border border-blue-500 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                  >
+                  <span id="topbar-nome-texto" class="text-sm font-semibold text-slate-900 truncate">—</span>
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0"></i>
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <span id="badge-modo-leitura" class="hidden text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Somente leitura</span>
-                <button onclick="voltarParaProjetos()" class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
-                  <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-                  Meus Projetos
+
+              <!-- Direita: Status + Ações -->
+              <div class="flex items-center gap-2 shrink-0">
+                <!-- Indicador de status -->
+                <div id="topbar-status" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium">
+                  <span id="topbar-status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                  <span id="topbar-status-texto">Salvo</span>
+                </div>
+
+                <!-- Botão Salvar Agora -->
+                <button 
+                  id="btn-salvar-agora" 
+                  onclick="salvarAgoraUI()" 
+                  class="hidden text-xs font-semibold px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  <i data-lucide="save" class="w-3.5 h-3.5 inline mr-1"></i>
+                  Salvar
                 </button>
+
+                <!-- Botão Sair sem Salvar -->
+                <button 
+                  id="btn-sair-sem-salvar" 
+                  onclick="sairSemSalvarUI()" 
+                  class="hidden text-xs font-semibold px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Descartar
+                </button>
+
+                <!-- Badge: Somente leitura -->
+                <span id="badge-modo-leitura-topbar" class="hidden text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Leitura</span>
               </div>
             </div>
           </div>
+
+          <!-- Espaçador para a top bar (altura fixa) -->
+          <div class="h-16"></div>
+
         <main
         class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4"
         id="documento-container"
@@ -1967,6 +2011,7 @@
 
       function marcarComoAlterado() {
         estadoAlterado = true;
+        exibirIndicadorNaoSalvo();
         if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
         idTimeoutAutoSave = setTimeout(autoSalvarNoGoogle, AUTO_SAVE_DEBOUNCE_MS);
       }
@@ -2188,12 +2233,14 @@
 
         atualizarCabecalhoProjeto();
         aplicarModoSomenteLeitura(projeto.meuPapel === "visualizacao");
+        inicializarTopbar();
 
         mostrarArea("area-projeto-atual");
         switchTab("nivel1");
 
         ocultarCarregando();
         estadoAlterado = false;
+        atualizarStatusTopbar("salvo");
         iniciarObservadorDeAlteracoes();
       }
 
@@ -2210,7 +2257,10 @@
         document.getElementById("sidebar-papel-projeto-atual").textContent = papel.texto;
 
         document.getElementById("badge-modo-leitura").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
+        document.getElementById("badge-modo-leitura-topbar").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
         document.getElementById("btn-compartilhar-sidebar").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "dono");
+        
+        atualizarTopbarNome();
       }
 
       // Bloqueia edição e exportações para colaboradores com papel
@@ -2357,6 +2407,8 @@
         if (PROJETO_ATUAL.meuPapel === "visualizacao") return; // sem permissão de edição
         if (typeof google === "undefined" || !google.script) return;
 
+        exibirIndicadorSalvando(); // Atualiza status para "Salvando..."
+
         const estadoJSON = obterEstadoGeralJSON();
         google.script.run
           .withSuccessHandler((info) => {
@@ -2369,6 +2421,7 @@
           .withFailureHandler((erro) => {
             console.error("Erro ao salvar no Google Apps Script:", erro);
             exibirErroSalvamento("Falha ao salvar seu progresso. Tentando novamente em breve...");
+            exibirIndicadorNaoSalvo();
             // Mantém estadoAlterado = true para a rede de segurança tentar de novo.
           })
           .salvarProjetoAtual(PROJETO_ATUAL.id, estadoJSON);
@@ -2541,6 +2594,162 @@
       function ocultarCarregando() {
         const overlay = document.getElementById("overlay-carregando");
         if (overlay) overlay.remove();
+      }
+
+      // ========================================================================
+      // TOP BAR: Gerenciamento de nome editável, status e ações de salvamento
+      // ========================================================================
+
+      // Atualiza o indicador de status de salvamento na top bar
+      function atualizarStatusTopbar(status) {
+        const dot = document.getElementById("topbar-status-dot");
+        const texto = document.getElementById("topbar-status-texto");
+        const btnSalvar = document.getElementById("btn-salvar-agora");
+        const btnSair = document.getElementById("btn-sair-sem-salvar");
+
+        if (!dot || !texto) return;
+
+        if (status === "salvo") {
+          dot.className = "w-2 h-2 rounded-full bg-emerald-500";
+          texto.textContent = "Salvo";
+          btnSalvar.classList.add("hidden");
+          btnSair.classList.add("hidden");
+        } else if (status === "salvando") {
+          dot.className = "w-2 h-2 rounded-full bg-blue-500 animate-pulse";
+          texto.textContent = "Salvando...";
+          btnSalvar.classList.add("hidden");
+          btnSair.classList.add("hidden");
+        } else if (status === "nao-salvo") {
+          dot.className = "w-2 h-2 rounded-full bg-orange-500";
+          texto.textContent = "Não salvo";
+          btnSalvar.classList.remove("hidden");
+          btnSair.classList.remove("hidden");
+        }
+      }
+
+      // Mostra indicador "Salvo" por alguns segundos
+      function exibirIndicadorSalvo() {
+        atualizarStatusTopbar("salvo");
+        setTimeout(() => {
+          if (estadoAlterado) atualizarStatusTopbar("nao-salvo");
+        }, 2000);
+      }
+
+      // Mostra indicador "Salvando..."
+      function exibirIndicadorSalvando() {
+        atualizarStatusTopbar("salvando");
+      }
+
+      // Mostra indicador "Não salvo"
+      function exibirIndicadorNaoSalvo() {
+        atualizarStatusTopbar("nao-salvo");
+      }
+
+      // Inicializa a top bar (adiciona event listener para click-to-edit do nome)
+      function inicializarTopbar() {
+        const container = document.getElementById("topbar-nome-container");
+        if (container) {
+          container.onclick = abrirEdicaoNomeProjeto;
+        }
+      }
+
+      // Abre a edição do nome do projeto (click-to-edit)
+      function abrirEdicaoNomeProjeto() {
+        if (!PROJETO_ATUAL || PROJETO_ATUAL.meuPapel === "visualizacao") return;
+
+        const input = document.getElementById("topbar-nome-input");
+        const texto = document.getElementById("topbar-nome-texto");
+
+        input.value = PROJETO_ATUAL.nome;
+        input.classList.remove("hidden");
+        texto.classList.add("hidden");
+        input.focus();
+        input.select();
+
+        input.onkeydown = (e) => {
+          if (e.key === "Enter") salvarNomeProjeto();
+          if (e.key === "Escape") cancelarEdicaoNomeProjeto();
+        };
+
+        input.onblur = () => {
+          setTimeout(() => {
+            if (!document.activeElement.classList.contains("topbar-nome-input")) {
+              salvarNomeProjeto();
+            }
+          }, 100);
+        };
+      }
+
+      // Salva o novo nome do projeto
+      function salvarNomeProjeto() {
+        const input = document.getElementById("topbar-nome-input");
+        const texto = document.getElementById("topbar-nome-texto");
+        const novoNome = input.value.trim();
+
+        if (!novoNome || novoNome === PROJETO_ATUAL.nome) {
+          cancelarEdicaoNomeProjeto();
+          return;
+        }
+
+        if (typeof google === "undefined" || !google.script) return;
+
+        google.script.run
+          .withSuccessHandler((resultado) => {
+            PROJETO_ATUAL.nome = resultado.nome;
+            PROJETO_ATUAL.atualizadoEm = resultado.atualizadoEm;
+            PROJETO_ATUAL.atualizadoPor = resultado.atualizadoPor;
+            atualizarTopbarNome();
+            cancelarEdicaoNomeProjeto();
+            carregarListaProjetos(); // Atualiza lista de projetos
+            exibirIndicadorSalvo();
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao renomear projeto:", erro);
+            exibirErroSalvamento("Falha ao renomear projeto: " + erro.message);
+            cancelarEdicaoNomeProjeto();
+          })
+          .renomearProjeto(PROJETO_ATUAL.id, novoNome);
+      }
+
+      // Cancela edição do nome
+      function cancelarEdicaoNomeProjeto() {
+        const input = document.getElementById("topbar-nome-input");
+        const texto = document.getElementById("topbar-nome-texto");
+
+        input.classList.add("hidden");
+        texto.classList.remove("hidden");
+      }
+
+      // Atualiza o nome exibido na top bar
+      function atualizarTopbarNome() {
+        const texto = document.getElementById("topbar-nome-texto");
+        if (PROJETO_ATUAL) {
+          texto.textContent = PROJETO_ATUAL.nome;
+        }
+      }
+
+      // Força salvamento imediato
+      function salvarAgoraUI() {
+        if (!estadoAlterado) {
+          exibirErroSalvamento("Não há alterações para salvar.");
+          return;
+        }
+        exibirIndicadorSalvando();
+        autoSalvarNoGoogle();
+      }
+
+      // Sai sem salvar (descarta alterações)
+      function sairSemSalvarUI() {
+        if (!estadoAlterado) {
+          voltarParaProjetos();
+          return;
+        }
+
+        if (confirm("Você tem alterações não salvas. Deseja sair sem salvar?")) {
+          estadoAlterado = false;
+          if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
+          voltarParaProjetos();
+        }
       }
     </script>
   </body>
