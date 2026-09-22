@@ -29,6 +29,14 @@
         background-color: #eff6ff;
         color: #1e293b; /* Força o texto a ficar escuro ao editar qualquer campo */
       }
+      /* Animação de spinner para indicar loading */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .animate-spin-fast {
+        animation: spin 0.8s linear infinite;
+      }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-800 antialiased min-h-screen pb-12">
@@ -836,7 +844,10 @@
               <option value="edicao">Pode editar</option>
               <option value="visualizacao">Somente leitura</option>
             </select>
-            <button onclick="adicionarColaborador()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors">Adicionar</button>
+            <button id="btn-adicionar-colaborador" onclick="adicionarColaborador()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
+              <span>Adicionar</span>
+              <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
           </div>
         </div>
       </div>
@@ -2284,6 +2295,16 @@
         const papel = document.getElementById("modal-compartilhar-papel").value;
         if (!email || !PROJETO_COMPARTILHAR_ID) return;
 
+        const btn = document.getElementById("btn-adicionar-colaborador");
+        const span = btn.querySelector("span");
+        const icon = btn.querySelector("i");
+
+        // Desabilitar botão e mostrar spinner
+        btn.disabled = true;
+        btn.classList.add("opacity-70");
+        span.textContent = "Compartilhando...";
+        icon.classList.add("animate-spin-fast");
+
         google.script.run
           .withSuccessHandler((colaboradores) => {
             if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
@@ -2293,8 +2314,23 @@
             renderizarModalCompartilhar(document.getElementById("modal-compartilhar-nome-projeto").textContent.replace("Projeto: ", ""), colaboradores);
             document.getElementById("modal-compartilhar-email").value = "";
             carregarListaProjetos();
+
+            // Re-habilitar botão e remover spinner
+            btn.disabled = false;
+            btn.classList.remove("opacity-70");
+            span.textContent = "Adicionar";
+            icon.classList.remove("animate-spin-fast");
+            if (window.lucide) lucide.createIcons();
           })
-          .withFailureHandler((erro) => exibirErroSalvamento("Falha ao compartilhar: " + erro.message))
+          .withFailureHandler((erro) => {
+            exibirErroSalvamento("Falha ao compartilhar: " + erro.message);
+
+            // Re-habilitar botão e remover spinner em caso de erro
+            btn.disabled = false;
+            btn.classList.remove("opacity-70");
+            span.textContent = "Adicionar";
+            icon.classList.remove("animate-spin-fast");
+          })
           .compartilharProjeto(PROJETO_COMPARTILHAR_ID, email, papel);
       }
 

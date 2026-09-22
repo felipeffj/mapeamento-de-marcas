@@ -311,6 +311,8 @@ function criarProjeto(nome) {
 
   obterAba_(ABA_PROJETOS).appendRow([id, nomeFinal, email, '[]', agora, agora, email]);
 
+  logarCriacaoProjeto_(id, nomeFinal);
+
   return {
     id: id, nome: nomeFinal, dono: email, colaboradores: [],
     criadoEm: agora, atualizadoEm: agora, atualizadoPor: email, meuPapel: 'dono'
@@ -380,6 +382,8 @@ function salvarProjetoAtual(projetoId, dadosJson) {
   var agora = new Date().toISOString();
   abaProjetos.getRange(linhaProjeto.linha, 6, 1, 2).setValues([[agora, email]]);
 
+  logarSalvamento_(projetoId);
+
   return { atualizadoEm: agora, atualizadoPor: email };
 }
 
@@ -435,6 +439,10 @@ function compartilharProjeto(projetoId, emailColaborador, papelConcedido) {
   else colaboradores.push({ email: emailColaborador, papel: papelConcedido });
 
   abaProjetos.getRange(linhaProjeto.linha, 4).setValue(JSON.stringify(colaboradores));
+  
+  var acao = existente ? 'atualizado' : 'adicionado';
+  logarCompartilhamento_(projetoId, emailColaborador, acao, papelConcedido);
+  
   return colaboradores;
 }
 
@@ -453,6 +461,9 @@ function removerColaborador(projetoId, emailColaborador) {
   colaboradores = colaboradores.filter(function (c) { return c.email.toLowerCase() !== alvo; });
 
   abaProjetos.getRange(linhaProjeto.linha, 4).setValue(JSON.stringify(colaboradores));
+  
+  logarCompartilhamento_(projetoId, emailColaborador, 'removido', null);
+  
   return colaboradores;
 }
 
@@ -467,6 +478,7 @@ function excluirProjeto(projetoId) {
     throw new Error('Apenas o dono do projeto pode excluí-lo.');
   }
 
+  var nomeProjeto = linhaProjeto.valores[1];
   abaProjetos.deleteRow(linhaProjeto.linha);
 
   var abaDados = obterAba_(ABA_DADOS);
@@ -474,6 +486,8 @@ function excluirProjeto(projetoId) {
   for (var i = dadosDados.length - 1; i >= 1; i--) {
     if (dadosDados[i][0] === projetoId) abaDados.deleteRow(i + 1);
   }
+
+  logarExclusaoProjeto_(projetoId, nomeProjeto);
 
   return true;
 }
@@ -590,4 +604,54 @@ function assertIgual_(rotulo, valorObtido, valorEsperado) {
   var ok = valorObtido === valorEsperado;
   Logger.log((ok ? 'OK   ' : 'FALHA') + ' — ' + rotulo + ' | esperado=' + valorEsperado + ' obtido=' + valorObtido);
   if (!ok) throw new Error('Teste falhou: ' + rotulo + ' (esperado ' + valorEsperado + ', obtido ' + valorObtido + ')');
+}
+
+// ============================================================================
+// SISTEMA DE LOGGING ESTRUTURADO
+// ============================================================================
+// Registra eventos de ação (compartilhamento, criação, exclusão, etc) em uma
+// aba "Logs" para auditoria e debugging. Acesse a aba "Logs" na planilha de
+// banco de dados para ver o histórico completo de ações.
+
+var ABA_LOGS = 'Logs';
+
+function logarAcao_(tipo, idProjeto, descricao, extra) {
+  try {
+    var planilha = obterPlanilhaProjetos_();
+    var abaLogs = planilha.getSheetByName(ABA_LOGS);
+    if (!abaLogs) {
+      abaLogs = planilha.insertSheet(ABA_LOGS);
+      // Criar cabeçalho
+      abaLogs.appendRow(['Data/Hora', 'Usuário', 'Tipo', 'ID Projeto', 'Descrição', 'Extra (JSON)']);
+    }
+
+    var agora = new Date();
+    var usuario = obterUsuarioAtual();
+    var extra_json = extra ? JSON.stringify(extra) : '';
+
+    abaLogs.appendRow([agora, usuario, tipo, idProjeto || '', descricao || '', extra_json]);
+  } catch (e) {
+    Logger.log('Aviso: Erro ao registrar log — ' + e.message);
+    // Não lance erro; logging é secundário, não deve quebrar a funcionalidade
+  }
+}
+
+function logarCompartilhamento_(idProjeto, emailColaborador, acao, papel) {
+  logarAcao_('compartilhamento', idProjeto, acao + ' ' + emailColaborador, { papel: papel });
+}
+
+function logarCriacaoProjeto_(idProjeto, nomeProjeto) {
+  logarAcao_('criacao_projeto', idProjeto, 'Projeto criado: ' + nomeProjeto);
+}
+
+function logarExclusaoProjeto_(idProjeto, nomeProjeto) {
+  logarAcao_('exclusao_projeto', idProjeto, 'Projeto excluído: ' + nomeProjeto);
+}
+
+function logarSalvamento_(idProjeto) {
+  logarAcao_('salvamento', idProjeto, 'Conteúdo salvo');
+}
+
+function logarErro_(idProjeto, mensagem, detalhes) {
+  logarAcao_('erro', idProjeto || '', mensagem, detalhes);
 }
