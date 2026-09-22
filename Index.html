@@ -37,9 +37,35 @@
       .animate-spin-fast {
         animation: spin 0.8s linear infinite;
       }
+      /* Progress bar no topo da página */
+      @keyframes progress-bar-stripes {
+        from { background-position: 0 0; }
+        to { background-position: 40px 0; }
+      }
+      #progress-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 50%, #7c3aed 100%);
+        background-size: 40px 40px;
+        box-shadow: 0 0 10px rgba(124, 58, 237, 0.6);
+        animation: progress-bar-stripes 0.5s linear infinite;
+        z-index: 100;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        width: 0%;
+      }
+      #progress-bar.visible {
+        opacity: 1;
+      }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-800 antialiased min-h-screen pb-12">
+    <!-- PROGRESS BAR: Barra roxa no topo durante carregamento -->
+    <div id="progress-bar"></div>
+
     <!-- Top Navigation Header / Overlay -->
     <div 
         id="sidebar-overlay" 
@@ -2198,12 +2224,16 @@
         if (typeof google === "undefined" || !google.script) return;
 
         exibirCarregando();
+        iniciarProgressBar();
+
         google.script.run
           .withSuccessHandler((resultado) => {
             aplicarProjetoNaTela(resultado.projeto, resultado.conteudoJson);
+            completarProgressBar();
           })
           .withFailureHandler((erro) => {
             ocultarCarregando();
+            completarProgressBar();
             console.error("Erro ao abrir projeto:", erro);
             exibirErroSalvamento("Não foi possível abrir este projeto: " + erro.message);
           })
@@ -2418,6 +2448,7 @@
         if (typeof google === "undefined" || !google.script) return;
 
         exibirIndicadorSalvando(); // Atualiza status para "Salvando..."
+        iniciarProgressBar(); // Inicia progress bar
 
         const estadoJSON = obterEstadoGeralJSON();
         google.script.run
@@ -2427,11 +2458,13 @@
             PROJETO_ATUAL.atualizadoPor = info.atualizadoPor;
             atualizarCabecalhoProjeto();
             exibirIndicadorSalvo();
+            completarProgressBar(); // Completa progress bar
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao salvar no Google Apps Script:", erro);
             exibirErroSalvamento("Falha ao salvar seu progresso. Tentando novamente em breve...");
             exibirIndicadorNaoSalvo();
+            completarProgressBar(); // Completa progress bar mesmo em erro
             // Mantém estadoAlterado = true para a rede de segurança tentar de novo.
           })
           .salvarProjetoAtual(PROJETO_ATUAL.id, estadoJSON);
@@ -2607,6 +2640,57 @@
       }
 
       // ========================================================================
+      // PROGRESS BAR: Barra de carregamento roxa no topo
+      // ========================================================================
+
+      let progressBarTimeout = null;
+      let currentProgress = 0;
+
+      // Inicia a animação da progress bar
+      function iniciarProgressBar() {
+        const bar = document.getElementById("progress-bar");
+        if (!bar) return;
+
+        // Limpa timeout anterior se houver
+        if (progressBarTimeout) clearTimeout(progressBarTimeout);
+
+        // Reseta progress
+        currentProgress = 10;
+        bar.style.width = currentProgress + "%";
+        bar.classList.add("visible");
+
+        // Anima gradualmente até 90%
+        const animar = () => {
+          if (currentProgress < 90) {
+            currentProgress += Math.random() * 30;
+            if (currentProgress > 90) currentProgress = 90;
+            bar.style.width = currentProgress + "%";
+            progressBarTimeout = setTimeout(animar, 300 + Math.random() * 700);
+          }
+        };
+        animar();
+      }
+
+      // Completa a progress bar (100%) e depois a esconde
+      function completarProgressBar() {
+        const bar = document.getElementById("progress-bar");
+        if (!bar) return;
+
+        if (progressBarTimeout) clearTimeout(progressBarTimeout);
+
+        currentProgress = 100;
+        bar.style.width = "100%";
+
+        // Mantém visível por um pouco, depois desaparece suavemente
+        setTimeout(() => {
+          bar.classList.remove("visible");
+          setTimeout(() => {
+            bar.style.width = "0%";
+          }, 200);
+        }, 400);
+      }
+
+      // ========================================================================
       // TOP BAR: Gerenciamento de nome editável, status e ações de salvamento
       // ========================================================================
 
@@ -2703,6 +2787,8 @@
 
         if (typeof google === "undefined" || !google.script) return;
 
+        iniciarProgressBar();
+
         google.script.run
           .withSuccessHandler((resultado) => {
             PROJETO_ATUAL.nome = resultado.nome;
@@ -2712,11 +2798,13 @@
             cancelarEdicaoNomeProjeto();
             carregarListaProjetos(); // Atualiza lista de projetos
             exibirIndicadorSalvo();
+            completarProgressBar();
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao renomear projeto:", erro);
             exibirErroSalvamento("Falha ao renomear projeto: " + erro.message);
             cancelarEdicaoNomeProjeto();
+            completarProgressBar();
           })
           .renomearProjeto(PROJETO_ATUAL.id, novoNome);
       }
