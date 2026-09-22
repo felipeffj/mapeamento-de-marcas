@@ -155,14 +155,14 @@
                     <span>Baixar .html</span>
                   </button>
 
-                  <button onclick="copiarWikiMarkupNivel1()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
-                    <i data-lucide="file-code-2" class="w-4 h-4"></i>
-                    <span>Copiar Wiki Markup (Nível 1)</span>
+                  <button onclick="copiarWikiMarkupNivel1()" class="w-full flex items-start gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
+                    <i data-lucide="file-code-2" class="w-4 h-4 mt-0.5 shrink-0"></i>
+                    <span class="text-left leading-snug">Copiar Wiki Markup (Nível 1)</span>
                   </button>
 
-                  <button onclick="copiarWikiMarkupNivel2()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors">
-                    <i data-lucide="file-code-2" class="w-4 h-4"></i>
-                    <span>Copiar Wiki Markup (Nível 2)</span>
+                  <button onclick="copiarWikiMarkupNivel2()" class="w-full flex items-start gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors">
+                    <i data-lucide="file-code-2" class="w-4 h-4 mt-0.5 shrink-0"></i>
+                    <span class="text-left leading-snug">Copiar Wiki Markup (Nível 2)</span>
                   </button>
               </div>
 
@@ -809,7 +809,7 @@
 
     <!-- MODAL: Compartilhar Projeto -->
     <div id="modal-compartilhar" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between">
           <h3 class="font-bold text-slate-900 flex items-center gap-2">
             <i data-lucide="users" class="w-4 h-4 text-blue-600"></i>
@@ -827,13 +827,16 @@
 
         <div class="border-t border-slate-100 pt-4 space-y-2">
           <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Adicionar colaborador</label>
-          <div class="flex flex-col sm:flex-row gap-2">
-            <input id="modal-compartilhar-email" type="email" placeholder="email@totvs.com.br" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <!-- flex-wrap (não breakpoint de viewport) garante que o botão quebre para
+               a linha de baixo quando o modal não tiver espaço horizontal suficiente,
+               em vez de ficar cortado/escondido atrás de uma rolagem horizontal. -->
+          <div class="flex flex-wrap gap-2">
+            <input id="modal-compartilhar-email" type="email" placeholder="email@totvs.com.br" class="flex-1 min-w-[10rem] border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <select id="modal-compartilhar-papel" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
               <option value="edicao">Pode editar</option>
               <option value="visualizacao">Somente leitura</option>
             </select>
-            <button onclick="adicionarColaborador()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors">Adicionar</button>
+            <button onclick="adicionarColaborador()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors">Adicionar</button>
           </div>
         </div>
       </div>

@@ -159,30 +159,75 @@ function obterUsuarioAtual() {
 
 // Obtém (ou cria, na primeira execução) a planilha usada como base de dados
 // de projetos, com as duas abas já com cabeçalho.
+//
+// IMPORTANTE: como o Web App precisa rodar como "Executar como: usuário que
+// acessa o app" (para Session.getActiveUser() identificar cada analista),
+// SpreadsheetApp.create() cria o arquivo na conta de quem quer que tenha
+// disparado esta função pela primeira vez — e esse arquivo nasce PRIVADO,
+// visível só para quem o criou. Sem compartilhá-lo explicitamente, qualquer
+// outro colaborador que tentar abrir esse mesmo ID via openById() recebe um
+// erro de permissão. Por isso, logo após criar a planilha, ela é
+// compartilhada com todo o domínio Workspace (mesma premissa de
+// Session.getActiveUser() já documentada no README) com permissão de edição.
+//
+// Um LockService evita que dois usuários, ambos vendo a propriedade vazia ao
+// mesmo tempo (ex.: primeiro acesso concorrente de dois analistas), criem
+// duas planilhas em paralelo.
 function obterPlanilhaProjetos_() {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty(PLANILHA_ID_PROP);
 
   if (id) {
+    // Se a planilha já foi registrada, SEMPRE tentamos abri-la — nunca
+    // recriamos silenciosamente aqui. Um erro de abertura quase sempre é
+    // falta de compartilhamento (não "a planilha sumiu"), e recriar do zero
+    // faria o app inteiro passar a apontar para uma planilha nova e vazia,
+    // "perdendo" todos os projetos existentes para todo mundo.
     try {
       return SpreadsheetApp.openById(id);
     } catch (e) {
-      // Planilha referenciada não existe mais (ex.: removida manualmente);
-      // cai para recriação abaixo.
+      throw new Error(
+        'Não foi possível acessar a planilha de projetos (ID ' + id + '). ' +
+        'Provavelmente ela não está compartilhada com o seu usuário. ' +
+        'Peça para quem administra o script compartilhar essa planilha (Google Drive) ' +
+        'com edição para o seu domínio/e-mail. Detalhe técnico: ' + e.message
+      );
     }
   }
 
-  var planilha = SpreadsheetApp.create('Mapeamento de Marcas - Banco de Projetos');
-  props.setProperty(PLANILHA_ID_PROP, planilha.getId());
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Reconfirma dentro do lock: outro usuário pode ter criado a planilha
+    // enquanto esperávamos.
+    id = props.getProperty(PLANILHA_ID_PROP);
+    if (id) return SpreadsheetApp.openById(id);
 
-  var abaProjetos = planilha.getSheets()[0];
-  abaProjetos.setName(ABA_PROJETOS);
-  abaProjetos.appendRow(CABECALHO_PROJETOS);
+    var planilha = SpreadsheetApp.create('Mapeamento de Marcas - Banco de Projetos');
 
-  var abaDados = planilha.insertSheet(ABA_DADOS);
-  abaDados.appendRow(CABECALHO_DADOS);
+    // Compartilha com todo o domínio (edição) para que qualquer colega da
+    // mesma organização consiga abrir/gravar nessa planilha, independente
+    // de quem a criou.
+    try {
+      DriveApp.getFileById(planilha.getId()).setSharing(DriveApp.Access.DOMAIN, DriveApp.Access.EDIT);
+    } catch (e) {
+      // Se o domínio não permitir esse nível de sharing (conta pessoal, por
+      // exemplo), a planilha continua funcional para o próprio dono; os
+      // demais usuários precisarão receber acesso manual pelo Drive.
+    }
 
-  return planilha;
+    var abaProjetos = planilha.getSheets()[0];
+    abaProjetos.setName(ABA_PROJETOS);
+    abaProjetos.appendRow(CABECALHO_PROJETOS);
+
+    var abaDados = planilha.insertSheet(ABA_DADOS);
+    abaDados.appendRow(CABECALHO_DADOS);
+
+    props.setProperty(PLANILHA_ID_PROP, planilha.getId());
+    return planilha;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function obterAba_(nomeAba) {
@@ -199,15 +244,18 @@ function localizarLinhaProjeto_(abaProjetos, projetoId) {
 }
 
 // Determina o papel do e-mail informado sobre um projeto já localizado:
-// "dono", "edicao", "visualizacao" ou null (sem acesso).
+// "dono", "edicao", "visualizacao" ou null (sem acesso). Comparação é
+// case-insensitive porque o Google pode devolver o e-mail do usuário com
+// capitalização diferente da que foi digitada por quem compartilhou.
 function determinarPapel_(linhaProjeto, email) {
   if (!linhaProjeto) return null;
-  if (linhaProjeto.valores[2] === email) return 'dono';
+  var emailNormalizado = (email || '').toLowerCase();
+  if ((linhaProjeto.valores[2] || '').toLowerCase() === emailNormalizado) return 'dono';
 
   var colaboradores = [];
   try { colaboradores = JSON.parse(linhaProjeto.valores[3] || '[]'); } catch (e) {}
   for (var i = 0; i < colaboradores.length; i++) {
-    if (colaboradores[i].email === email) return colaboradores[i].papel;
+    if ((colaboradores[i].email || '').toLowerCase() === emailNormalizado) return colaboradores[i].papel;
   }
   return null;
 }
@@ -215,7 +263,7 @@ function determinarPapel_(linhaProjeto, email) {
 // Lista os projetos onde o usuário atual é dono ou colaborador, com o papel
 // de cada um, ordenados do mais recentemente atualizado para o mais antigo.
 function listarProjetos() {
-  var email = obterUsuarioAtual();
+  var email = (obterUsuarioAtual() || '').toLowerCase();
   var abaProjetos = obterAba_(ABA_PROJETOS);
   var dados = abaProjetos.getDataRange().getValues();
   var resultado = [];
@@ -226,11 +274,11 @@ function listarProjetos() {
     try { colaboradores = JSON.parse(linha[3] || '[]'); } catch (e) {}
 
     var papel = null;
-    if (linha[2] === email) {
+    if ((linha[2] || '').toLowerCase() === email) {
       papel = 'dono';
     } else {
       for (var j = 0; j < colaboradores.length; j++) {
-        if (colaboradores[j].email === email) { papel = colaboradores[j].papel; break; }
+        if ((colaboradores[j].email || '').toLowerCase() === email) { papel = colaboradores[j].papel; break; }
       }
     }
     if (!papel) continue;
@@ -366,7 +414,7 @@ function compartilharProjeto(projetoId, emailColaborador, papelConcedido) {
   var abaProjetos = obterAba_(ABA_PROJETOS);
   var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
 
-  if (!linhaProjeto || linhaProjeto.valores[2] !== email) {
+  if (!linhaProjeto || (linhaProjeto.valores[2] || '').toLowerCase() !== email.toLowerCase()) {
     throw new Error('Apenas o dono do projeto pode compartilhá-lo.');
   }
   if (['edicao', 'visualizacao'].indexOf(papelConcedido) === -1) {
@@ -396,7 +444,7 @@ function removerColaborador(projetoId, emailColaborador) {
   var abaProjetos = obterAba_(ABA_PROJETOS);
   var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
 
-  if (!linhaProjeto || linhaProjeto.valores[2] !== email) {
+  if (!linhaProjeto || (linhaProjeto.valores[2] || '').toLowerCase() !== email.toLowerCase()) {
     throw new Error('Apenas o dono do projeto pode gerenciar colaboradores.');
   }
 
@@ -415,7 +463,7 @@ function excluirProjeto(projetoId) {
   var abaProjetos = obterAba_(ABA_PROJETOS);
   var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
 
-  if (!linhaProjeto || linhaProjeto.valores[2] !== email) {
+  if (!linhaProjeto || (linhaProjeto.valores[2] || '').toLowerCase() !== email.toLowerCase()) {
     throw new Error('Apenas o dono do projeto pode excluí-lo.');
   }
 
