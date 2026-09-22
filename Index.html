@@ -2248,18 +2248,28 @@
         if (!PROJETO_ATUAL) return;
         const papel = rotuloPapel(PROJETO_ATUAL.meuPapel);
 
-        document.getElementById("cabecalho-nome-projeto").textContent = PROJETO_ATUAL.nome;
-        document.getElementById("cabecalho-info-atualizacao").textContent =
-          `Atualizado em ${formatarDataHora(PROJETO_ATUAL.atualizadoEm)}` +
-          (PROJETO_ATUAL.atualizadoPor ? ` por ${PROJETO_ATUAL.atualizadoPor}` : "");
+        // Elementos antigos removidos (agora na top bar)
+        // document.getElementById("cabecalho-nome-projeto").textContent = PROJETO_ATUAL.nome;
+        // document.getElementById("cabecalho-info-atualizacao").textContent = ...
 
-        document.getElementById("sidebar-nome-projeto-atual").textContent = PROJETO_ATUAL.nome;
-        document.getElementById("sidebar-papel-projeto-atual").textContent = papel.texto;
-
-        document.getElementById("badge-modo-leitura").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
-        document.getElementById("badge-modo-leitura-topbar").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
-        document.getElementById("btn-compartilhar-sidebar").classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "dono");
+        // Atualiza sidebar
+        const sidebarNome = document.getElementById("sidebar-nome-projeto-atual");
+        if (sidebarNome) sidebarNome.textContent = PROJETO_ATUAL.nome;
         
+        const sidebarPapel = document.getElementById("sidebar-papel-projeto-atual");
+        if (sidebarPapel) sidebarPapel.textContent = papel.texto;
+
+        // Badges
+        const badgeLeituraOld = document.getElementById("badge-modo-leitura");
+        if (badgeLeituraOld) badgeLeituraOld.classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
+        
+        const badgeLeituraTopbar = document.getElementById("badge-modo-leitura-topbar");
+        if (badgeLeituraTopbar) badgeLeituraTopbar.classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "visualizacao");
+        
+        const btnCompartilhar = document.getElementById("btn-compartilhar-sidebar");
+        if (btnCompartilhar) btnCompartilhar.classList.toggle("hidden", PROJETO_ATUAL.meuPapel !== "dono");
+        
+        // Atualiza top bar
         atualizarTopbarNome();
       }
 
