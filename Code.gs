@@ -518,3 +518,75 @@ function listarProjetosComMigracao() {
   migrarRascunhoLegadoSeNecessario_();
   return listarProjetos();
 }
+
+// ============================================================================
+// FUNÇÃO DE TESTE MANUAL — NÃO é chamada pelo front-end (google.script.run).
+// Serve para validar a lógica de permissão/compartilhamento sem depender de
+// uma segunda conta Google real. Simula um "e-mail de colaborador fictício"
+// diretamente contra a planilha, sem passar por Session.getActiveUser().
+//
+// Como rodar: no editor do Apps Script, selecione esta função no dropdown ao
+// lado do botão "Executar" e clique em "Executar". Depois abra
+// "Ver > Registros de execução" (ou Ctrl+Enter) para ver o resultado de cada
+// verificação. Ao final, o projeto de teste criado é excluído automaticamente.
+//
+// O que NÃO é coberto por este teste: se o deploy está configurado como
+// "Executar como: usuário que acessa" (isso só se confirma com uma segunda
+// conta Google acessando a URL publicada de verdade — ver README, seção
+// "Como publicar/rodar").
+function testarLogicaDeCompartilhamento_() {
+  var meuEmail = obterUsuarioAtual();
+  var colaboradorFicticio = 'colaborador.teste@totvs.com.br';
+  var colaboradorMaiusculo = colaboradorFicticio.toUpperCase(); // valida case-insensitive
+  var semAcesso = 'alguem.sem.acesso@totvs.com.br';
+
+  Logger.log('--- Iniciando teste de lógica de compartilhamento ---');
+  Logger.log('Usuário atual (dono do projeto de teste): ' + meuEmail);
+
+  var projeto = criarProjeto('__TESTE_COMPARTILHAMENTO__');
+  Logger.log('Projeto de teste criado: ' + projeto.id);
+
+  try {
+    // 1) Dono deve ter papel "dono".
+    var abaProjetos = obterAba_(ABA_PROJETOS);
+    var linha = localizarLinhaProjeto_(abaProjetos, projeto.id);
+    assertIgual_('Papel do dono', determinarPapel_(linha, meuEmail), 'dono');
+
+    // 2) Sem compartilhamento, e-mail fictício não deve ter acesso.
+    assertIgual_('Papel de quem não tem acesso', determinarPapel_(linha, semAcesso), null);
+
+    // 3) Compartilha como "edicao" e confere o papel resolvido.
+    compartilharProjeto(projeto.id, colaboradorFicticio, 'edicao');
+    linha = localizarLinhaProjeto_(abaProjetos, projeto.id);
+    assertIgual_('Papel após compartilhar (edicao)', determinarPapel_(linha, colaboradorFicticio), 'edicao');
+
+    // 4) Case-insensitive: mesmo e-mail em maiúsculas deve resolver igual.
+    assertIgual_('Papel com e-mail em maiúsculas', determinarPapel_(linha, colaboradorMaiusculo), 'edicao');
+
+    // 5) Atualiza o papel para "visualizacao" e confere.
+    compartilharProjeto(projeto.id, colaboradorFicticio, 'visualizacao');
+    linha = localizarLinhaProjeto_(abaProjetos, projeto.id);
+    assertIgual_('Papel após atualizar para visualizacao', determinarPapel_(linha, colaboradorFicticio), 'visualizacao');
+
+    // 6) Remove o colaborador e confere que perde o acesso.
+    removerColaborador(projeto.id, colaboradorFicticio);
+    linha = localizarLinhaProjeto_(abaProjetos, projeto.id);
+    assertIgual_('Papel após remover colaborador', determinarPapel_(linha, colaboradorFicticio), null);
+
+    // 7) listarProjetos() do dono deve incluir o projeto de teste.
+    var meusProjetos = listarProjetos();
+    var encontrado = meusProjetos.some(function (p) { return p.id === projeto.id; });
+    assertIgual_('Projeto de teste aparece em listarProjetos() do dono', encontrado, true);
+
+    Logger.log('--- Todos os testes passaram. ---');
+  } finally {
+    excluirProjeto(projeto.id);
+    Logger.log('Projeto de teste excluído (limpeza concluída).');
+  }
+}
+
+function assertIgual_(rotulo, valorObtido, valorEsperado) {
+  var ok = valorObtido === valorEsperado;
+  Logger.log((ok ? 'OK   ' : 'FALHA') + ' — ' + rotulo + ' | esperado=' + valorEsperado + ' obtido=' + valorObtido);
+  if (!ok) throw new Error('Teste falhou: ' + rotulo + ' (esperado ' + valorEsperado + ', obtido ' + valorObtido + ')');
+}

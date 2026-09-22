@@ -102,6 +102,8 @@ O "banco de dados" é uma **Planilha Google** ("Mapeamento de Marcas - Banco de 
 
 Ver [nota técnica sobre compressão/chunking](#persistência-com-compressão-gzip-e-chunking--nota-técnica) para detalhes de como o conteúdo de cada projeto é comprimido antes de ser salvo na aba `Dados`.
 
+**Como testar a lógica de permissão sem uma segunda conta Google**: `Code.gs` inclui a função `testarLogicaDeCompartilhamento_()`, que valida toda a resolução de papéis (dono/edição/leitura/sem acesso, case-insensitive, atualização e remoção de colaborador) simulando um "e-mail de colaborador fictício" diretamente contra a planilha — sem depender de `Session.getActiveUser()`. Para rodar: no editor do Apps Script, selecione essa função no dropdown ao lado do botão "Executar", clique em "Executar" e depois em "Ver > Registros de execução" para conferir o resultado de cada verificação (o projeto de teste criado é excluído automaticamente ao final). Isso cobre a lógica de ACL, mas **não** valida se o deploy está corretamente configurado como "Executar como: usuário que acessa" — isso só se confirma com uma segunda conta Google acessando a URL publicada de verdade.
+
 ## Limitações conhecidas
 
 - **Sem histórico/versionamento**: o auto-save (por debounce, ~3s após a última edição) sobrescreve o estado anterior a cada save — não há como ver "quem mudou o quê" além do rótulo "Atualizado em ... por ...".
