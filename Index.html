@@ -215,8 +215,55 @@
             </button>
           </div>
 
+          <!-- Diagnóstico e Logs (sempre visível no rodapé) -->
+          <div class="border-t border-slate-200 pt-3 mt-auto">
+            <button onclick="abrirModalDiagnostico()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+              <i data-lucide="bug" class="w-4 h-4 text-orange-500"></i>
+              <span>Diagnóstico & Logs</span>
+            </button>
+          </div>
+
       </div>
     </aside>
+
+    <!-- MODAL: DIAGNÓSTICO E LOGS -->
+    <div id="modal-diagnostico" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div class="border-b border-slate-200 bg-slate-50 px-6 py-4 flex items-center justify-between sticky top-0">
+          <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="bug" class="w-5 h-5 text-orange-500"></i>
+            Diagnóstico & Logs
+          </h2>
+          <button onclick="fecharModalDiagnostico()" class="text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 mb-2">Informações do Sistema</h3>
+            <div id="diagnostico-info" class="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 font-mono whitespace-pre-wrap overflow-auto max-h-40">
+              Carregando...
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 mb-2">Logs Recentes (últimos 30)</h3>
+            <div id="diagnostico-logs" class="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 font-mono overflow-auto max-h-64">
+              Carregando...
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="exportarLogsBruto()" class="flex-1 flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              Exportar Logs (JSON)
+            </button>
+            <button onclick="limparLogsDiagnostico()" class="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              Limpar Logs
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Main Container (AJUSTADO PARA sm:ml-64 PARA NÃO COBRIR O CONTEÚDO) -->
     <div class="p-4 sm:ml-64">
@@ -2178,7 +2225,11 @@
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao listar projetos:", erro);
-            exibirErroSalvamento("Não foi possível carregar a lista de projetos.");
+            logarErroFrontend('Falha ao listar projetos', { 
+              erro_mensagem: erro.message,
+              erro_completo: String(erro)
+            });
+            exibirErroSalvamento("Não foi possível carregar a lista de projetos: " + erro.message);
           })
           .listarProjetosComMigracao();
       }
@@ -2213,6 +2264,11 @@
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao excluir projeto:", erro);
+            logarErroFrontend('Falha ao excluir projeto', { 
+              projeto_id: id,
+              projeto_nome: nome,
+              erro_mensagem: erro.message
+            });
             exibirErroSalvamento("Falha ao excluir o projeto: " + erro.message);
           })
           .excluirProjeto(id);
@@ -2235,6 +2291,11 @@
             ocultarCarregando();
             completarProgressBar();
             console.error("Erro ao abrir projeto:", erro);
+            logarErroFrontend('Falha ao abrir projeto', { 
+              projeto_id: id,
+              erro_mensagem: erro.message,
+              erro_completo: String(erro)
+            });
             exibirErroSalvamento("Não foi possível abrir este projeto: " + erro.message);
           })
           .abrirProjeto(id);
@@ -2413,6 +2474,14 @@
             if (window.lucide) lucide.createIcons();
           })
           .withFailureHandler((erro) => {
+            console.error("Erro ao compartilhar:", erro);
+            completarProgressBar();
+            logarErroFrontend('Falha ao compartilhar projeto', { 
+              projeto_id: PROJETO_COMPARTILHAR_ID,
+              email_alvo: email,
+              erro_mensagem: erro.message,
+              erro_completo: String(erro)
+            });
             exibirErroSalvamento("Falha ao compartilhar: " + erro.message);
 
             // Re-habilitar botão e remover spinner em caso de erro
@@ -2435,7 +2504,15 @@
             renderizarModalCompartilhar(document.getElementById("modal-compartilhar-nome-projeto").textContent.replace("Projeto: ", ""), colaboradores);
             carregarListaProjetos();
           })
-          .withFailureHandler((erro) => exibirErroSalvamento("Falha ao remover colaborador: " + erro.message))
+          .withFailureHandler((erro) => {
+            console.error("Erro ao remover colaborador:", erro);
+            logarErroFrontend('Falha ao remover colaborador', { 
+              projeto_id: PROJETO_COMPARTILHAR_ID,
+              email_alvo: email,
+              erro_mensagem: erro.message
+            });
+            exibirErroSalvamento("Falha ao remover colaborador: " + erro.message);
+          })
           .removerColaborador(PROJETO_COMPARTILHAR_ID, email);
       }
 
@@ -2848,6 +2925,167 @@
           if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
           voltarParaProjetos();
         }
+      }
+
+      // ============================================================================
+      // FUNÇÕES DE DIAGNÓSTICO E LOGS
+      // ============================================================================
+
+      function abrirModalDiagnostico() {
+        const modal = document.getElementById('modal-diagnostico');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        carregarDiagnostico();
+      }
+
+      function fecharModalDiagnostico() {
+        const modal = document.getElementById('modal-diagnostico');
+        if (!modal) return;
+        modal.classList.add('hidden');
+      }
+
+      function carregarDiagnostico() {
+        if (typeof google === "undefined" || !google.script) {
+          document.getElementById('diagnostico-info').textContent = 'Erro: Google Apps Script não disponível';
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler((resultado) => {
+            exibirDiagnostico(resultado);
+          })
+          .withFailureHandler((erro) => {
+            console.error('Erro ao carregar diagnóstico:', erro);
+            document.getElementById('diagnostico-info').textContent = 'Erro ao carregar diagnóstico: ' + erro.message;
+            document.getElementById('diagnostico-logs').textContent = 'Erro: ' + erro.message;
+          })
+          .obterDiagnosticoSistema();
+      }
+
+      function exibirDiagnostico(diagnostico) {
+        let infoTexto = '';
+        
+        if (diagnostico.erro) {
+          infoTexto = 'ERRO: ' + diagnostico.erro + '\n' + (diagnostico.stack || '');
+        } else {
+          infoTexto = 'Usuário: ' + diagnostico.usuario + '\n';
+          infoTexto += 'Total de projetos: ' + diagnostico.total_projetos_do_usuario + '\n';
+          infoTexto += 'Timestamp: ' + diagnostico.timestamp + '\n\n';
+          infoTexto += 'Projetos:\n';
+          if (diagnostico.projetos && diagnostico.projetos.length > 0) {
+            diagnostico.projetos.forEach((p, i) => {
+              infoTexto += (i + 1) + '. [' + p.meu_papel + '] ' + p.nome + '\n';
+              infoTexto += '   ID: ' + p.id + '\n';
+              infoTexto += '   Dono: ' + p.dono + '\n';
+              infoTexto += '   Colaboradores: ' + p.colaboradores_qtd + '\n';
+              infoTexto += '   Criado: ' + p.criado_em + '\n';
+              infoTexto += '   Atualizado: ' + p.atualizado_em + '\n\n';
+            });
+          } else {
+            infoTexto += '(nenhum projeto)\n';
+          }
+        }
+
+        document.getElementById('diagnostico-info').textContent = infoTexto;
+
+        // Exibir logs
+        let logsTexto = '';
+        if (diagnostico.logs && diagnostico.logs.sucesso && diagnostico.logs.logs && diagnostico.logs.logs.length > 0) {
+          logsTexto = 'Total de logs: ' + diagnostico.logs.total + '\n\n';
+          diagnostico.logs.logs.forEach((log, i) => {
+            logsTexto += '--- Log #' + (i + 1) + ' ---\n';
+            logsTexto += 'Data/Hora: ' + log.data_hora + '\n';
+            logsTexto += 'Usuário: ' + log.usuario + '\n';
+            logsTexto += 'Tipo: ' + log.tipo + '\n';
+            logsTexto += 'ID Projeto: ' + log.id_projeto + '\n';
+            logsTexto += 'Descrição: ' + log.descricao + '\n';
+            if (log.extra) {
+              logsTexto += 'Extra: ' + JSON.stringify(log.extra, null, 2) + '\n';
+            }
+            logsTexto += '\n';
+          });
+        } else if (diagnostico.logs && diagnostico.logs.erro) {
+          logsTexto = 'Erro ao carregar logs: ' + diagnostico.logs.erro;
+        } else {
+          logsTexto = '(nenhum log disponível)';
+        }
+
+        document.getElementById('diagnostico-logs').textContent = logsTexto;
+      }
+
+      function exportarLogsBruto() {
+        if (typeof google === "undefined" || !google.script) return;
+
+        google.script.run
+          .withSuccessHandler((resultado) => {
+            const dataStr = JSON.stringify(resultado, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'diagnostico-logs-' + new Date().getTime() + '.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          })
+          .withFailureHandler((erro) => {
+            alert('Erro ao exportar logs: ' + erro.message);
+          })
+          .obterDiagnosticoSistema();
+      }
+
+      function limparLogsDiagnostico() {
+        if (!confirm('Tem certeza que deseja limpar todos os logs? Esta ação não pode ser desfeita.')) return;
+        alert('Função de limpeza de logs ainda não implementada. Por enquanto, você pode deletar manualmente a aba "Logs" na planilha de banco de dados.');
+      }
+
+      // Registra erro no backend com contexto completo
+      function logarErroFrontend(mensagem, contexto) {
+        if (typeof google === "undefined" || !google.script) {
+          console.error('Erro (não logado no backend):', mensagem, contexto);
+          return;
+        }
+
+        var detalhes = {
+          mensagem_ui: mensagem,
+          contexto: contexto,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          projetoAtualId: PROJETO_ATUAL ? PROJETO_ATUAL.id : null
+        };
+
+        google.script.run
+          .withFailureHandler((erro) => {
+            console.warn('Aviso: Não foi possível registrar erro no backend:', erro);
+          })
+          .logarErro_(null, 'Erro capturado no front-end: ' + mensagem, detalhes);
+      }
+
+      // Melhora função criarNovoProjeto com melhor tratamento de erro
+      function criarNovoProjeto() {
+        const nome = prompt("Nome do novo projeto (ex.: nome da marca/cliente):");
+        if (nome === null) return;
+        if (typeof google === "undefined" || !google.script) return;
+
+        iniciarProgressBar();
+
+        google.script.run
+          .withSuccessHandler((projeto) => {
+            aplicarProjetoNaTela(projeto, null);
+            completarProgressBar();
+          })
+          .withFailureHandler((erro) => {
+            console.error("Erro ao criar projeto:", erro);
+            completarProgressBar();
+            logarErroFrontend('Falha ao criar projeto', { 
+              nome: nome,
+              erro_mensagem: erro.message,
+              erro_completo: String(erro)
+            });
+            exibirErroSalvamento("Falha ao criar o projeto: " + erro.message);
+          })
+          .criarProjeto(nome);
       }
     </script>
   </body>

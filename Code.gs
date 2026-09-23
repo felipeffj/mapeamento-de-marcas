@@ -302,89 +302,121 @@ function listarProjetos() {
 // Cria um projeto novo (vazio — o front-end usa o modelo padrão já embutido
 // no HTML) com o usuário atual como dono.
 function criarProjeto(nome) {
-  var email = obterUsuarioAtual();
-  if (!email) throw new Error('Não foi possível identificar seu usuário Google. Verifique se você está logado.');
+  try {
+    var email = obterUsuarioAtual();
+    if (!email) throw new Error('Não foi possível identificar seu usuário Google. Verifique se você está logado.');
 
-  var id = Utilities.getUuid();
-  var agora = new Date().toISOString();
-  var nomeFinal = (nome || '').trim() || 'Novo Projeto';
+    var id = Utilities.getUuid();
+    var agora = new Date().toISOString();
+    var nomeFinal = (nome || '').trim() || 'Novo Projeto';
 
-  obterAba_(ABA_PROJETOS).appendRow([id, nomeFinal, email, '[]', agora, agora, email]);
+    obterAba_(ABA_PROJETOS).appendRow([id, nomeFinal, email, '[]', agora, agora, email]);
 
-  logarCriacaoProjeto_(id, nomeFinal);
+    logarCriacaoProjeto_(id, nomeFinal);
 
-  return {
-    id: id, nome: nomeFinal, dono: email, colaboradores: [],
-    criadoEm: agora, atualizadoEm: agora, atualizadoPor: email, meuPapel: 'dono'
-  };
+    return {
+      id: id, nome: nomeFinal, dono: email, colaboradores: [],
+      criadoEm: agora, atualizadoEm: agora, atualizadoPor: email, meuPapel: 'dono'
+    };
+  } catch (e) {
+    var detalhes = {
+      mensagem_erro: e.message,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    };
+    logarErro_('', 'Erro ao criar projeto: ' + e.message, detalhes);
+    throw e;
+  }
 }
 
 // Abre um projeto: valida acesso e retorna metadados + conteúdo (já
 // descomprimido). conteudoJson vem null para projetos recém-criados, sem
 // nenhum save ainda — o front-end mantém o modelo padrão do HTML nesse caso.
 function abrirProjeto(projetoId) {
-  var email = obterUsuarioAtual();
-  var abaProjetos = obterAba_(ABA_PROJETOS);
-  var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
-  var papel = determinarPapel_(linhaProjeto, email);
+  try {
+    var email = obterUsuarioAtual();
+    var abaProjetos = obterAba_(ABA_PROJETOS);
+    var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
+    var papel = determinarPapel_(linhaProjeto, email);
 
-  if (!papel) throw new Error('Você não tem acesso a este projeto (ou ele foi excluído).');
+    if (!papel) throw new Error('Você não tem acesso a este projeto (ou ele foi excluído).');
 
-  var abaDados = obterAba_(ABA_DADOS);
-  var dadosDados = abaDados.getDataRange().getValues();
-  var conteudoBase64 = null;
-  for (var i = 1; i < dadosDados.length; i++) {
-    if (dadosDados[i][0] === projetoId) { conteudoBase64 = dadosDados[i][1] || null; break; }
+    var abaDados = obterAba_(ABA_DADOS);
+    var dadosDados = abaDados.getDataRange().getValues();
+    var conteudoBase64 = null;
+    for (var i = 1; i < dadosDados.length; i++) {
+      if (dadosDados[i][0] === projetoId) { conteudoBase64 = dadosDados[i][1] || null; break; }
+    }
+
+    return {
+      projeto: {
+        id: linhaProjeto.valores[0],
+        nome: linhaProjeto.valores[1],
+        dono: linhaProjeto.valores[2],
+        colaboradores: JSON.parse(linhaProjeto.valores[3] || '[]'),
+        criadoEm: linhaProjeto.valores[4],
+        atualizadoEm: linhaProjeto.valores[5],
+        atualizadoPor: linhaProjeto.valores[6],
+        meuPapel: papel
+      },
+      conteudoJson: conteudoBase64 ? descomprimir_(conteudoBase64) : null
+    };
+  } catch (e) {
+    var detalhes = {
+      projetoId: projetoId,
+      mensagem_erro: e.message,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    };
+    logarErro_(projetoId, 'Erro ao abrir projeto: ' + e.message, detalhes);
+    throw e;
   }
-
-  return {
-    projeto: {
-      id: linhaProjeto.valores[0],
-      nome: linhaProjeto.valores[1],
-      dono: linhaProjeto.valores[2],
-      colaboradores: JSON.parse(linhaProjeto.valores[3] || '[]'),
-      criadoEm: linhaProjeto.valores[4],
-      atualizadoEm: linhaProjeto.valores[5],
-      atualizadoPor: linhaProjeto.valores[6],
-      meuPapel: papel
-    },
-    conteudoJson: conteudoBase64 ? descomprimir_(conteudoBase64) : null
-  };
 }
 
 // Salva o conteúdo de um projeto específico. Exige papel "dono" ou "edicao";
 // "visualizacao" é rejeitado mesmo que o front-end tente chamar por engano.
 function salvarProjetoAtual(projetoId, dadosJson) {
-  var email = obterUsuarioAtual();
-  var abaProjetos = obterAba_(ABA_PROJETOS);
-  var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
-  var papel = determinarPapel_(linhaProjeto, email);
+  try {
+    var email = obterUsuarioAtual();
+    var abaProjetos = obterAba_(ABA_PROJETOS);
+    var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
+    var papel = determinarPapel_(linhaProjeto, email);
 
-  if (papel !== 'dono' && papel !== 'edicao') {
-    throw new Error('Você não tem permissão de edição neste projeto.');
+    if (papel !== 'dono' && papel !== 'edicao') {
+      throw new Error('Você não tem permissão de edição neste projeto.');
+    }
+
+    var comprimido = comprimirEcodificar_(dadosJson);
+
+    var abaDados = obterAba_(ABA_DADOS);
+    var dadosDados = abaDados.getDataRange().getValues();
+    var linhaDados = -1;
+    for (var i = 1; i < dadosDados.length; i++) {
+      if (dadosDados[i][0] === projetoId) { linhaDados = i + 1; break; }
+    }
+
+    if (linhaDados > 0) {
+      abaDados.getRange(linhaDados, 2).setValue(comprimido);
+    } else {
+      abaDados.appendRow([projetoId, comprimido]);
+    }
+
+    var agora = new Date().toISOString();
+    abaProjetos.getRange(linhaProjeto.linha, 6, 1, 2).setValues([[agora, email]]);
+
+    logarSalvamento_(projetoId);
+
+    return { atualizadoEm: agora, atualizadoPor: email };
+  } catch (e) {
+    var detalhes = {
+      projetoId: projetoId,
+      mensagem_erro: e.message,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    };
+    logarErro_(projetoId, 'Erro ao salvar projeto: ' + e.message, detalhes);
+    throw e;
   }
-
-  var comprimido = comprimirEcodificar_(dadosJson);
-
-  var abaDados = obterAba_(ABA_DADOS);
-  var dadosDados = abaDados.getDataRange().getValues();
-  var linhaDados = -1;
-  for (var i = 1; i < dadosDados.length; i++) {
-    if (dadosDados[i][0] === projetoId) { linhaDados = i + 1; break; }
-  }
-
-  if (linhaDados > 0) {
-    abaDados.getRange(linhaDados, 2).setValue(comprimido);
-  } else {
-    abaDados.appendRow([projetoId, comprimido]);
-  }
-
-  var agora = new Date().toISOString();
-  abaProjetos.getRange(linhaProjeto.linha, 6, 1, 2).setValues([[agora, email]]);
-
-  logarSalvamento_(projetoId);
-
-  return { atualizadoEm: agora, atualizadoPor: email };
 }
 
 // Reseta o conteúdo salvo de um projeto (volta ao modelo padrão embutido no
@@ -437,37 +469,50 @@ function renomearProjeto(projetoId, novoNome) {
 }
 
 // Concede (ou atualiza) o acesso de um colaborador. Só o dono pode chamar.
+// Adiciona timeout handling para evitar loops infinitos em case de lock contention.
 function compartilharProjeto(projetoId, emailColaborador, papelConcedido) {
-  var email = obterUsuarioAtual();
-  var abaProjetos = obterAba_(ABA_PROJETOS);
-  var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
+  try {
+    var email = obterUsuarioAtual();
+    var abaProjetos = obterAba_(ABA_PROJETOS);
+    var linhaProjeto = localizarLinhaProjeto_(abaProjetos, projetoId);
 
-  if (!linhaProjeto || (linhaProjeto.valores[2] || '').toLowerCase() !== email.toLowerCase()) {
-    throw new Error('Apenas o dono do projeto pode compartilhá-lo.');
-  }
-  if (['edicao', 'visualizacao'].indexOf(papelConcedido) === -1) {
-    throw new Error('Papel inválido: use "edicao" ou "visualizacao".');
-  }
+    if (!linhaProjeto || (linhaProjeto.valores[2] || '').toLowerCase() !== email.toLowerCase()) {
+      throw new Error('Apenas o dono do projeto pode compartilhá-lo.');
+    }
+    if (['edicao', 'visualizacao'].indexOf(papelConcedido) === -1) {
+      throw new Error('Papel inválido: use "edicao" ou "visualizacao".');
+    }
 
-  emailColaborador = (emailColaborador || '').trim().toLowerCase();
-  if (!emailColaborador || emailColaborador === email.toLowerCase()) {
-    throw new Error('Informe o e-mail de outro usuário.');
-  }
+    emailColaborador = (emailColaborador || '').trim().toLowerCase();
+    if (!emailColaborador || emailColaborador === email.toLowerCase()) {
+      throw new Error('Informe o e-mail de outro usuário.');
+    }
 
-  var colaboradores = JSON.parse(linhaProjeto.valores[3] || '[]');
-  var existente = null;
-  for (var i = 0; i < colaboradores.length; i++) {
-    if (colaboradores[i].email.toLowerCase() === emailColaborador) { existente = colaboradores[i]; break; }
-  }
-  if (existente) existente.papel = papelConcedido;
-  else colaboradores.push({ email: emailColaborador, papel: papelConcedido });
+    var colaboradores = JSON.parse(linhaProjeto.valores[3] || '[]');
+    var existente = null;
+    for (var i = 0; i < colaboradores.length; i++) {
+      if (colaboradores[i].email.toLowerCase() === emailColaborador) { existente = colaboradores[i]; break; }
+    }
+    if (existente) existente.papel = papelConcedido;
+    else colaboradores.push({ email: emailColaborador, papel: papelConcedido });
 
-  abaProjetos.getRange(linhaProjeto.linha, 4).setValue(JSON.stringify(colaboradores));
-  
-  var acao = existente ? 'atualizado' : 'adicionado';
-  logarCompartilhamento_(projetoId, emailColaborador, acao, papelConcedido);
-  
-  return colaboradores;
+    abaProjetos.getRange(linhaProjeto.linha, 4).setValue(JSON.stringify(colaboradores));
+    
+    var acao = existente ? 'atualizado' : 'adicionado';
+    logarCompartilhamento_(projetoId, emailColaborador, acao, papelConcedido);
+    
+    return colaboradores;
+  } catch (e) {
+    var detalhes = {
+      projetoId: projetoId,
+      emailColaborador: emailColaborador,
+      mensagem_erro: e.message,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    };
+    logarErro_(projetoId, 'Erro ao compartilhar projeto: ' + e.message, detalhes);
+    throw e;
+  }
 }
 
 // Remove o acesso de um colaborador. Só o dono pode chamar.
@@ -678,4 +723,68 @@ function logarSalvamento_(idProjeto) {
 
 function logarErro_(idProjeto, mensagem, detalhes) {
   logarAcao_('erro', idProjeto || '', mensagem, detalhes);
+}
+
+// --- FUNÇÕES DE ACESSO A LOGS E DEBUGGING ---
+// Retorna os últimos N logs registrados (útil para debugging)
+function obterLogsRecentes(limite) {
+  limite = limite || 50;
+  try {
+    var planilha = obterPlanilhaProjetos_();
+    var abaLogs = planilha.getSheetByName(ABA_LOGS);
+    if (!abaLogs) {
+      return { erro: 'Aba de logs não encontrada', logs: [] };
+    }
+
+    var dados = abaLogs.getDataRange().getValues();
+    var logs = [];
+    
+    for (var i = Math.max(1, dados.length - limite); i < dados.length; i++) {
+      logs.push({
+        data_hora: dados[i][0],
+        usuario: dados[i][1],
+        tipo: dados[i][2],
+        id_projeto: dados[i][3],
+        descricao: dados[i][4],
+        extra: dados[i][5] ? JSON.parse(dados[i][5]) : null
+      });
+    }
+    
+    return { sucesso: true, total: dados.length - 1, logs: logs };
+  } catch (e) {
+    return { erro: e.message, logs: [] };
+  }
+}
+
+// Retorna diagnostico completo do sistema (projetos, usuários, status de logs)
+function obterDiagnosticoSistema() {
+  try {
+    var usuario = obterUsuarioAtual();
+    var meusProjetos = listarProjetos();
+    var logsRecentes = obterLogsRecentes(30);
+    
+    return {
+      usuario: usuario,
+      total_projetos_do_usuario: meusProjetos.length,
+      projetos: meusProjetos.map(function (p) {
+        return {
+          id: p.id,
+          nome: p.nome,
+          meu_papel: p.meuPapel,
+          dono: p.dono,
+          colaboradores_qtd: p.colaboradores.length,
+          criado_em: p.criadoEm,
+          atualizado_em: p.atualizadoEm
+        };
+      }),
+      logs: logsRecentes,
+      timestamp: new Date().toISOString()
+    };
+  } catch (e) {
+    return {
+      erro: e.message,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    };
+  }
 }
