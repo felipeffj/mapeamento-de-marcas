@@ -2456,20 +2456,28 @@
         }
 
         const span = btn.querySelector("span");
-        const icon = btn.querySelector("i");
+        // Procura por <i> ou qualquer elemento com data-lucide
+        let icon = btn.querySelector("i");
+        if (!icon) {
+          icon = btn.querySelector("[data-lucide]");
+        }
 
-        // Validação: span e icon devem existir
-        if (!span || !icon) {
-          console.error("Elementos span ou icon não encontrados dentro do botão", { span, icon });
-          alert("Erro: Elementos de interface não encontrados. Recarregue a página.");
+        // Validação: span deve existir. Icon é opcional (pode não estar renderizado ainda)
+        if (!span) {
+          console.error("Elemento span não encontrado dentro do botão");
+          alert("Erro: Elemento de interface não encontrado. Recarregue a página.");
           return;
         }
 
-        // Desabilitar botão e mostrar spinner
+        // Desabilitar botão e mostrar status
         btn.disabled = true;
         btn.classList.add("opacity-70");
         span.textContent = "Compartilhando...";
-        icon.classList.add("animate-spin-fast");
+        
+        // Se o icon existe, anima
+        if (icon) {
+          icon.classList.add("animate-spin-fast");
+        }
 
         google.script.run
           .withSuccessHandler((colaboradores) => {
@@ -2481,11 +2489,13 @@
             document.getElementById("modal-compartilhar-email").value = "";
             carregarListaProjetos();
 
-            // Re-habilitar botão e remover spinner
+            // Re-habilitar botão e remover status
             btn.disabled = false;
             btn.classList.remove("opacity-70");
             span.textContent = "Adicionar";
-            icon.classList.remove("animate-spin-fast");
+            if (icon) {
+              icon.classList.remove("animate-spin-fast");
+            }
             if (window.lucide) lucide.createIcons();
           })
           .withFailureHandler((erro) => {
