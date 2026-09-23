@@ -772,10 +772,12 @@ function obterDiagnosticoSistema() {
   try {
     var usuario = obterUsuarioAtual();
     if (!usuario) {
-      return {
+      var erro_response = {
         erro: 'Não foi possível identificar o usuário. Verifique se você está logado.',
         timestamp: new Date().toISOString()
       };
+      // Converte explicitamente para evitar problema de serialização
+      return JSON.parse(JSON.stringify(erro_response));
     }
 
     var meusProjetos = [];
@@ -783,7 +785,6 @@ function obterDiagnosticoSistema() {
       meusProjetos = listarProjetos();
     } catch (eProj) {
       Logger.log('Aviso: Erro ao listar projetos em obterDiagnosticoSistema: ' + eProj.message);
-      // Continua mesmo se falhar; melhor retornar diagnóstico parcial do que nada
     }
 
     var logsRecentes = {};
@@ -794,7 +795,7 @@ function obterDiagnosticoSistema() {
       logsRecentes = { erro: 'Falha ao carregar logs', logs: [] };
     }
     
-    return {
+    var diagnostico = {
       usuario: usuario,
       total_projetos_do_usuario: meusProjetos.length,
       projetos: meusProjetos.map(function (p) {
@@ -811,9 +812,13 @@ function obterDiagnosticoSistema() {
       logs: logsRecentes,
       timestamp: new Date().toISOString()
     };
+    
+    // Serializa e desserializa para garantir que não há objetos não-serializáveis
+    return JSON.parse(JSON.stringify(diagnostico));
   } catch (e) {
+    Logger.log('Erro em obterDiagnosticoSistema: ' + e.message + ' | Stack: ' + e.stack);
     // Se tudo falhar, retorna erro mas com estrutura válida
-    return {
+    var fallback = {
       erro: 'Erro ao gerar diagnóstico: ' + e.message,
       stack: e.stack,
       usuario: '',
@@ -822,5 +827,7 @@ function obterDiagnosticoSistema() {
       logs: { erro: 'Não disponível', logs: [] },
       timestamp: new Date().toISOString()
     };
+    // Serializa e desserializa o fallback também
+    return JSON.parse(JSON.stringify(fallback));
   }
 }

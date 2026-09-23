@@ -2447,8 +2447,23 @@
         if (!email || !PROJETO_COMPARTILHAR_ID) return;
 
         const btn = document.getElementById("btn-adicionar-colaborador");
+        
+        // Validação: btn deve existir
+        if (!btn) {
+          console.error("Botão 'btn-adicionar-colaborador' não encontrado no DOM");
+          alert("Erro: Elemento de botão não encontrado. Recarregue a página.");
+          return;
+        }
+
         const span = btn.querySelector("span");
         const icon = btn.querySelector("i");
+
+        // Validação: span e icon devem existir
+        if (!span || !icon) {
+          console.error("Elementos span ou icon não encontrados dentro do botão", { span, icon });
+          alert("Erro: Elementos de interface não encontrados. Recarregue a página.");
+          return;
+        }
 
         // Desabilitar botão e mostrar spinner
         btn.disabled = true;
@@ -2494,14 +2509,26 @@
       }
 
       function removerColaboradorUI(email) {
-        if (!PROJETO_COMPARTILHAR_ID) return;
+        if (!PROJETO_COMPARTILHAR_ID) {
+          console.error("PROJETO_COMPARTILHAR_ID não definido");
+          return;
+        }
+
+        if (typeof google === "undefined" || !google.script) {
+          console.error("Google Apps Script não disponível");
+          return;
+        }
+
         google.script.run
           .withSuccessHandler((colaboradores) => {
             if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
               PROJETO_ATUAL.colaboradores = colaboradores;
               atualizarCabecalhoProjeto();
             }
-            renderizarModalCompartilhar(document.getElementById("modal-compartilhar-nome-projeto").textContent.replace("Projeto: ", ""), colaboradores);
+            const nomeProjeto = document.getElementById("modal-compartilhar-nome-projeto");
+            if (nomeProjeto) {
+              renderizarModalCompartilhar(nomeProjeto.textContent.replace("Projeto: ", ""), colaboradores);
+            }
             carregarListaProjetos();
           })
           .withFailureHandler((erro) => {
@@ -3039,10 +3066,18 @@
       }
 
       function exportarLogsBruto() {
-        if (typeof google === "undefined" || !google.script) return;
+        if (typeof google === "undefined" || !google.script) {
+          alert('Erro: Google Apps Script não disponível');
+          return;
+        }
 
         google.script.run
           .withSuccessHandler((resultado) => {
+            if (!resultado) {
+              alert('Erro: Servidor retornou resposta vazia. Tente novamente.');
+              return;
+            }
+
             const dataStr = JSON.stringify(resultado, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
@@ -3055,6 +3090,7 @@
             URL.revokeObjectURL(url);
           })
           .withFailureHandler((erro) => {
+            console.error('Erro ao exportar logs:', erro);
             alert('Erro ao exportar logs: ' + erro.message);
           })
           .obterDiagnosticoSistema();
