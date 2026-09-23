@@ -56,6 +56,27 @@ mapeamento-de-marcas/
 
 > Recomenda-se usar [`clasp`](https://github.com/google/clasp) para versionar este projeto em Git e sincronizar com o Apps Script (`clasp push` / `clasp pull`), já que hoje o projeto não tem nenhum controle de versão nem pipeline de deploy.
 
+### ⚠️ Solução de Problemas: Erro "Você não tem permissão para chamar SpreadsheetApp.openById"
+
+Se um usuário vê o erro **"Você não tem permissão para chamar SpreadsheetApp.openById"**, significa que o Google Apps Script **não foi autorizado** pela primeira vez. Diferente de compartilhar a planilha no Google Drive, o Apps Script também requer autorização explícita de cada usuário.
+
+**Como resolver:**
+
+1. **Fazer logout** da conta Google.
+2. **Fazer login novamente**.
+3. **Recarregar a página** do mapeamento de marcas.
+4. Um diálogo do Google aparecerá pedindo para **autorizar o script** a acessar seus dados — clique **"Autorizar"** e aceite as permissões.
+5. Pronto — agora o usuário terá acesso aos projetos.
+
+**Por que isso acontece:**
+
+- O Web App foi publicado como "Executar como: usuário que acessa", o que significa que cada usuário precisa autorizar o script para que ele possa acessar a planilha em seu nome. Essa é uma proteção de segurança do Google.
+- Simplesmente compartilhar a planilha no Google Drive não é suficiente — o script também precisa de permissão.
+
+**Dica:** Você pode verificar quem autorizou o script em **Google Account > Segurança > Apps e sites de terceiros > Gerenciar todos os apps autorizados**.
+
+---
+
 ## Funcionalidades
 
 - **Home**: tela inicial ao abrir o app — atalhos para criar um novo projeto ou ver a lista de projetos recentes.

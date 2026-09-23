@@ -2229,7 +2229,15 @@
               erro_mensagem: erro.message,
               erro_completo: String(erro)
             });
-            exibirErroSalvamento("Não foi possível carregar a lista de projetos: " + erro.message);
+            
+            var mensagemErro = "Não foi possível carregar a lista de projetos.";
+            if (erro.message && erro.message.indexOf('SpreadsheetApp.openById') > -1) {
+              mensagemErro = "⚠️ Erro de Permissão: Você precisa autorizar este script.\n\nSolução:\n1. Faça logout\n2. Faça login novamente\n3. Clique em 'Autorizar' quando Google pedir\n4. Recarregue a página\n\nErro técnico: " + erro.message;
+            } else {
+              mensagemErro += "\n\nErro: " + erro.message;
+            }
+            
+            exibirErroSalvamento(mensagemErro);
           })
           .listarProjetosComMigracao();
       }
@@ -2245,7 +2253,15 @@
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao criar projeto:", erro);
-            exibirErroSalvamento("Falha ao criar o projeto. Tente novamente.");
+            
+            var mensagemErro = "Falha ao criar o projeto.";
+            if (erro.message && erro.message.indexOf('SpreadsheetApp') > -1) {
+              mensagemErro = "⚠️ Erro de Permissão: Script sem autorização\n\nSolução:\n1. Faça logout\n2. Login novamente\n3. Autorize quando Google pedir\n4. Recarregue a página\n\nErro técnico: " + erro.message;
+            } else {
+              mensagemErro += "\n\nErro: " + erro.message;
+            }
+            
+            exibirErroSalvamento(mensagemErro);
           })
           .criarProjeto(nome);
       }
@@ -2989,11 +3005,11 @@
         }
 
         // Mostrar que está carregando
-        document.getElementById('diagnostico-info').textContent = 'Carregando informações do sistema...';
+        document.getElementById('diagnostico-info').textContent = 'Carregando informações do sistema...\n\n⚠️  Aviso de Permissões:\nSe é sua primeira vez usando este app, pode ser que uma janela de autorização apareça no Google.\nAutorize para que o script possa acessar suas pastas no Google Drive.';
         document.getElementById('diagnostico-logs').textContent = 'Carregando logs...';
 
         var timeoutId = setTimeout(() => {
-          document.getElementById('diagnostico-info').textContent = 'TIMEOUT: Servidor não respondeu em tempo hábil. Verifique se a planilha está compartilhada com você.';
+          document.getElementById('diagnostico-info').textContent = 'TIMEOUT: Servidor não respondeu em tempo hábil.\n\nPossíveis causas:\n1. A planilha não está compartilhada com você\n2. Você não autorizou o script na primeira vez\n3. Erro de permissões do Google Apps Script\n4. Falha de rede\n\nTente:\n- Fazer logout e login novamente\n- Recarregar a página\n- Entrar em contato com o administrador';
           document.getElementById('diagnostico-logs').textContent = 'Timeout ao aguardar resposta do servidor.';
         }, 15000); // 15 segundos de timeout
 
@@ -3002,7 +3018,7 @@
             clearTimeout(timeoutId);
             if (resultado === null || resultado === undefined) {
               console.warn('Resposta null/undefined de obterDiagnosticoSistema');
-              document.getElementById('diagnostico-info').textContent = 'Erro: Servidor retornou resposta vazia. Verifique seus acessos.';
+              document.getElementById('diagnostico-info').textContent = 'Erro: Servidor retornou resposta vazia.\n\nPossível causa:\n- Você não tem permissão para acessar a planilha de projetos\n- Erro de autorização do Google Apps Script\n\nSolução:\n1. Fazer logout e login novamente\n2. Aceitar permissões quando solicitado\n3. Recarregar a página';
               document.getElementById('diagnostico-logs').textContent = '(sem dados)';
               return;
             }
@@ -3011,8 +3027,30 @@
           .withFailureHandler((erro) => {
             clearTimeout(timeoutId);
             console.error('Erro ao carregar diagnóstico:', erro);
-            document.getElementById('diagnostico-info').textContent = 'ERRO: ' + (erro.message || String(erro)) + '\n\nPossíveis causas:\n- Você não tem acesso à planilha de projetos\n- Erro de permissões do Google Apps Script\n- Falha de rede';
-            document.getElementById('diagnostico-logs').textContent = 'Erro: ' + (erro.message || String(erro));
+            
+            var mensagemErro = 'ERRO: ' + (erro.message || String(erro)) + '\n\n';
+            
+            // Detecta erro de permissão específico
+            if (erro.message && erro.message.indexOf('SpreadsheetApp.openById') > -1) {
+              mensagemErro += 'PROBLEMA IDENTIFICADO: Erro de Autorização do Apps Script\n\n';
+              mensagemErro += 'Causa: O script não tem permissão para acessar a planilha de projetos.\n\n';
+              mensagemErro += 'Como resolver:\n';
+              mensagemErro += '1. Faça LOGOUT da sua conta Google\n';
+              mensagemErro += '2. Faça LOGIN novamente\n';
+              mensagemErro += '3. Recarregue esta página\n';
+              mensagemErro += '4. O Google pedirá para você AUTORIZAR o script\n';
+              mensagemErro += '5. Clique em "Autorizar" e aceite as permissões\n';
+              mensagemErro += '6. Tente novamente\n\n';
+              mensagemErro += 'Se o problema persistir, contate o administrador.';
+            } else {
+              mensagemErro += 'Possíveis causas:\n';
+              mensagemErro += '- Você não tem acesso à planilha de projetos\n';
+              mensagemErro += '- Erro de permissões do Google Apps Script\n';
+              mensagemErro += '- Falha de rede';
+            }
+            
+            document.getElementById('diagnostico-info').textContent = mensagemErro;
+            document.getElementById('diagnostico-logs').textContent = 'Erro técnico: ' + (erro.message || String(erro));
           })
           .obterDiagnosticoSistema();
       }
