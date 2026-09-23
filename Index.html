@@ -2947,30 +2947,55 @@
       function carregarDiagnostico() {
         if (typeof google === "undefined" || !google.script) {
           document.getElementById('diagnostico-info').textContent = 'Erro: Google Apps Script não disponível';
+          document.getElementById('diagnostico-logs').textContent = '(sem dados)';
           return;
         }
 
+        // Mostrar que está carregando
+        document.getElementById('diagnostico-info').textContent = 'Carregando informações do sistema...';
+        document.getElementById('diagnostico-logs').textContent = 'Carregando logs...';
+
+        var timeoutId = setTimeout(() => {
+          document.getElementById('diagnostico-info').textContent = 'TIMEOUT: Servidor não respondeu em tempo hábil. Verifique se a planilha está compartilhada com você.';
+          document.getElementById('diagnostico-logs').textContent = 'Timeout ao aguardar resposta do servidor.';
+        }, 15000); // 15 segundos de timeout
+
         google.script.run
           .withSuccessHandler((resultado) => {
+            clearTimeout(timeoutId);
+            if (resultado === null || resultado === undefined) {
+              console.warn('Resposta null/undefined de obterDiagnosticoSistema');
+              document.getElementById('diagnostico-info').textContent = 'Erro: Servidor retornou resposta vazia. Verifique seus acessos.';
+              document.getElementById('diagnostico-logs').textContent = '(sem dados)';
+              return;
+            }
             exibirDiagnostico(resultado);
           })
           .withFailureHandler((erro) => {
+            clearTimeout(timeoutId);
             console.error('Erro ao carregar diagnóstico:', erro);
-            document.getElementById('diagnostico-info').textContent = 'Erro ao carregar diagnóstico: ' + erro.message;
-            document.getElementById('diagnostico-logs').textContent = 'Erro: ' + erro.message;
+            document.getElementById('diagnostico-info').textContent = 'ERRO: ' + (erro.message || String(erro)) + '\n\nPossíveis causas:\n- Você não tem acesso à planilha de projetos\n- Erro de permissões do Google Apps Script\n- Falha de rede';
+            document.getElementById('diagnostico-logs').textContent = 'Erro: ' + (erro.message || String(erro));
           })
           .obterDiagnosticoSistema();
       }
 
       function exibirDiagnostico(diagnostico) {
+        // Validação: se diagnostico é null/undefined, trata como erro
+        if (!diagnostico) {
+          document.getElementById('diagnostico-info').textContent = 'ERRO: Resposta nula do servidor. Tente novamente.';
+          document.getElementById('diagnostico-logs').textContent = '(sem dados disponíveis)';
+          return;
+        }
+
         let infoTexto = '';
         
         if (diagnostico.erro) {
           infoTexto = 'ERRO: ' + diagnostico.erro + '\n' + (diagnostico.stack || '');
         } else {
-          infoTexto = 'Usuário: ' + diagnostico.usuario + '\n';
-          infoTexto += 'Total de projetos: ' + diagnostico.total_projetos_do_usuario + '\n';
-          infoTexto += 'Timestamp: ' + diagnostico.timestamp + '\n\n';
+          infoTexto = 'Usuário: ' + (diagnostico.usuario || '(desconhecido)') + '\n';
+          infoTexto += 'Total de projetos: ' + (diagnostico.total_projetos_do_usuario || 0) + '\n';
+          infoTexto += 'Timestamp: ' + (diagnostico.timestamp || '(desconhecido)') + '\n\n';
           infoTexto += 'Projetos:\n';
           if (diagnostico.projetos && diagnostico.projetos.length > 0) {
             diagnostico.projetos.forEach((p, i) => {

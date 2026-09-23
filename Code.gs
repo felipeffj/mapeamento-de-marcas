@@ -263,40 +263,51 @@ function determinarPapel_(linhaProjeto, email) {
 // Lista os projetos onde o usuário atual é dono ou colaborador, com o papel
 // de cada um, ordenados do mais recentemente atualizado para o mais antigo.
 function listarProjetos() {
-  var email = (obterUsuarioAtual() || '').toLowerCase();
-  var abaProjetos = obterAba_(ABA_PROJETOS);
-  var dados = abaProjetos.getDataRange().getValues();
-  var resultado = [];
-
-  for (var i = 1; i < dados.length; i++) {
-    var linha = dados[i];
-    var colaboradores = [];
-    try { colaboradores = JSON.parse(linha[3] || '[]'); } catch (e) {}
-
-    var papel = null;
-    if ((linha[2] || '').toLowerCase() === email) {
-      papel = 'dono';
-    } else {
-      for (var j = 0; j < colaboradores.length; j++) {
-        if ((colaboradores[j].email || '').toLowerCase() === email) { papel = colaboradores[j].papel; break; }
-      }
+  try {
+    var email = (obterUsuarioAtual() || '').toLowerCase();
+    if (!email) {
+      throw new Error('Usuário não identificado.');
     }
-    if (!papel) continue;
 
-    resultado.push({
-      id: linha[0],
-      nome: linha[1],
-      dono: linha[2],
-      colaboradores: colaboradores,
-      criadoEm: linha[4],
-      atualizadoEm: linha[5],
-      atualizadoPor: linha[6],
-      meuPapel: papel
-    });
+    var abaProjetos = obterAba_(ABA_PROJETOS);
+    var dados = abaProjetos.getDataRange().getValues();
+    var resultado = [];
+
+    for (var i = 1; i < dados.length; i++) {
+      var linha = dados[i];
+      var colaboradores = [];
+      try { colaboradores = JSON.parse(linha[3] || '[]'); } catch (e) {}
+
+      var papel = null;
+      if ((linha[2] || '').toLowerCase() === email) {
+        papel = 'dono';
+      } else {
+        for (var j = 0; j < colaboradores.length; j++) {
+          if ((colaboradores[j].email || '').toLowerCase() === email) { papel = colaboradores[j].papel; break; }
+        }
+      }
+      if (!papel) continue;
+
+      resultado.push({
+        id: linha[0],
+        nome: linha[1],
+        dono: linha[2],
+        colaboradores: colaboradores,
+        criadoEm: linha[4],
+        atualizadoEm: linha[5],
+        atualizadoPor: linha[6],
+        meuPapel: papel
+      });
+    }
+
+    resultado.sort(function (a, b) { return new Date(b.atualizadoEm) - new Date(a.atualizadoEm); });
+    return resultado;
+  } catch (e) {
+    Logger.log('Erro em listarProjetos: ' + e.message);
+    logarErro_('', 'Erro ao listar projetos: ' + e.message, { stack: e.stack });
+    // Re-lança o erro para que o frontend saiba que algo falhou
+    throw e;
   }
-
-  resultado.sort(function (a, b) { return new Date(b.atualizadoEm) - new Date(a.atualizadoEm); });
-  return resultado;
 }
 
 // Cria um projeto novo (vazio — o front-end usa o modelo padrão já embutido
@@ -760,8 +771,28 @@ function obterLogsRecentes(limite) {
 function obterDiagnosticoSistema() {
   try {
     var usuario = obterUsuarioAtual();
-    var meusProjetos = listarProjetos();
-    var logsRecentes = obterLogsRecentes(30);
+    if (!usuario) {
+      return {
+        erro: 'Não foi possível identificar o usuário. Verifique se você está logado.',
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    var meusProjetos = [];
+    try {
+      meusProjetos = listarProjetos();
+    } catch (eProj) {
+      Logger.log('Aviso: Erro ao listar projetos em obterDiagnosticoSistema: ' + eProj.message);
+      // Continua mesmo se falhar; melhor retornar diagnóstico parcial do que nada
+    }
+
+    var logsRecentes = {};
+    try {
+      logsRecentes = obterLogsRecentes(30);
+    } catch (eLogs) {
+      Logger.log('Aviso: Erro ao obter logs em obterDiagnosticoSistema: ' + eLogs.message);
+      logsRecentes = { erro: 'Falha ao carregar logs', logs: [] };
+    }
     
     return {
       usuario: usuario,
@@ -781,9 +812,14 @@ function obterDiagnosticoSistema() {
       timestamp: new Date().toISOString()
     };
   } catch (e) {
+    // Se tudo falhar, retorna erro mas com estrutura válida
     return {
-      erro: e.message,
+      erro: 'Erro ao gerar diagnóstico: ' + e.message,
       stack: e.stack,
+      usuario: '',
+      total_projetos_do_usuario: 0,
+      projetos: [],
+      logs: { erro: 'Não disponível', logs: [] },
       timestamp: new Date().toISOString()
     };
   }
