@@ -7,6 +7,7 @@ const APP_CONFIG = {
   // Nomes das abas da planilha
   SHEETS: {
     PROJETOS: 'Projetos',
+    DADOS: 'Dados',
     RASCUNHOS: 'Rascunhos',
     LOGS: 'Logs',
     CONFIG: 'Config'

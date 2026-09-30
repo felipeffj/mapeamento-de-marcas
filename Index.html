@@ -217,6 +217,21 @@
 
           <!-- Diagnóstico e Logs (sempre visível no rodapé) -->
           <div class="border-t border-slate-200 pt-3 mt-auto">
+            <div class="space-y-1 mb-2">
+              <span class="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Conta Google</span>
+              <button onclick="abrirSeletorContaGoogle()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                <i data-lucide="log-in" class="w-4 h-4 text-blue-600"></i>
+                <span>Entrar / trocar conta</span>
+              </button>
+              <button onclick="solicitarAutorizacaoGoogle()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+                <span>Autorizar aplicativo</span>
+              </button>
+              <button onclick="sairContaGoogle()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
+                <i data-lucide="log-out" class="w-4 h-4 text-slate-500"></i>
+                <span>Sair da conta Google</span>
+              </button>
+            </div>
             <button onclick="abrirModalDiagnostico()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-slate-700 hover:bg-slate-100 transition-colors">
               <i data-lucide="bug" class="w-4 h-4 text-orange-500"></i>
               <span>Diagnóstico & Logs</span>
@@ -225,6 +240,44 @@
 
       </div>
     </aside>
+
+    <!-- BLOQUEIO DE ACESSO AOS PROJETOS -->
+    <div id="auth-block-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/70 backdrop-blur-sm items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="auth-block-title">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 sm:p-8">
+        <div class="flex items-start gap-4">
+          <div class="shrink-0 rounded-full bg-amber-100 p-3">
+            <i data-lucide="shield-alert" class="w-6 h-6 text-amber-700"></i>
+          </div>
+          <div>
+            <h2 id="auth-block-title" class="text-lg font-bold text-slate-900">Acesso aos projetos não autorizado</h2>
+            <p id="auth-block-reason" class="text-sm text-slate-600 mt-2">
+              O Google ainda não autorizou o acesso deste aplicativo aos projetos.
+            </p>
+          </div>
+        </div>
+        <ol id="auth-block-steps" class="list-decimal pl-5 mt-5 space-y-2 text-sm text-slate-600">
+          <li>Solicite as permissões do Google e aceite o acesso solicitado pelo aplicativo.</li>
+          <li>Volte a esta página e selecione <strong>Tentar novamente</strong>.</li>
+        </ol>
+        <p id="auth-block-access-help" class="hidden mt-4 rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm text-blue-900">
+          A autorização do aplicativo está ativa, mas sua conta não consegue abrir a planilha onde os projetos são armazenados. Peça ao responsável pelo sistema para compartilhar a planilha com seu e-mail Google.
+        </p>
+        <div class="mt-6 flex flex-col sm:flex-row gap-2">
+          <a id="auth-authorize-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors">
+            Solicitar permissões
+          </a>
+          <button id="auth-login-button" onclick="sairTrocarConta()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors">
+            Sair e entrar novamente
+          </button>
+          <button onclick="recarregarApp()" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors">
+            Tentar novamente
+          </button>
+        </div>
+        <p class="text-xs text-slate-400 mt-4">
+          Se você recusou as permissões, use “Solicitar permissões” para abrir novamente a tela de autorização do Google.
+        </p>
+      </div>
+    </div>
 
     <!-- MODAL: DIAGNÓSTICO E LOGS -->
     <div id="modal-diagnostico" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
@@ -983,6 +1036,236 @@
     <script>
       // Initialize Lucide Icons
       lucide.createIcons();
+
+      let _webAppUrl = window.location.href;
+      let _authBlocked = false;
+      let _authChecking = false;
+
+      function showAuthOverlay(status) {
+        const overlay = document.getElementById("auth-block-overlay");
+        const reason = document.getElementById("auth-block-reason");
+        const steps = document.getElementById("auth-block-steps");
+        const accessHelp = document.getElementById("auth-block-access-help");
+        const authorizeLink = document.getElementById("auth-authorize-link");
+        const loginButton = document.getElementById("auth-login-button");
+        const diagnostics = status && status.diagnostics;
+        const accessDenied = status && status.code === "PROJECT_ACCESS_DENIED";
+        const configurationIssue = status && status.code === "CONFIGURATION_ERROR";
+        const verificationFailed = status && status.code === "AUTH_CHECK_FAILED";
+        const authorizeUrl = status && status.authorizationUrl;
+
+        if (reason) {
+          reason.textContent = accessDenied
+            ? "O aplicativo foi autorizado, mas sua conta Google não tem acesso à planilha onde os projetos são armazenados."
+            : configurationIssue
+              ? "O banco de projetos ainda não está configurado. O administrador do sistema precisa concluir essa configuração."
+              : verificationFailed
+                ? "Não foi possível confirmar sua autorização agora. Verifique sua conexão e tente novamente."
+                : "O Google ainda não autorizou o acesso deste aplicativo aos projetos. Sem essa autorização, não é possível listar nem criar projetos.";
+        }
+        if (steps) steps.classList.toggle("hidden", accessDenied || configurationIssue);
+        if (steps && verificationFailed) {
+          steps.children[0].textContent = "Verifique sua conexão com a internet.";
+          steps.children[1].textContent = "Selecione Tentar novamente para conferir o acesso.";
+        } else if (steps) {
+          steps.children[0].textContent = "Solicite as permissões do Google e aceite o acesso solicitado pelo aplicativo.";
+          steps.children[1].textContent = "Volte a esta página e selecione Tentar novamente.";
+        }
+        if (accessHelp) {
+          if (configurationIssue) {
+            const projectId = diagnostics && diagnostics.runtimeProjectId;
+            const details = diagnostics
+              ? " Na execução atual: chave nas Propriedades do script " +
+                (diagnostics.scriptPropertyExists ? "encontrada" : "não encontrada") +
+                "; valor " +
+                (diagnostics.scriptPropertyHasValue ? "não vazio" : "vazio ou ausente") +
+                (diagnostics.userPropertyHasValue
+                  ? "; existe valor em Propriedades do usuário (escopo diferente)"
+                  : "") +
+                (diagnostics.documentPropertyHasValue
+                  ? "; existe valor em Propriedades do documento (escopo diferente)"
+                  : "") +
+                (diagnostics.similarScriptPropertyKeyExists
+                  ? "; há uma chave parecida, verifique espaços ou letras"
+                  : "") +
+                "."
+              : "";
+            accessHelp.textContent =
+              "O diagnóstico confirma que esta execução não resolveu uma planilha; isso não indica defeito na planilha antiga." +
+              details +
+              (projectId
+                ? " Projeto Apps Script em execução: " + projectId + "."
+                : "") +
+              " O valor da propriedade não é exibido. Confira se SPREADSHEET_ID está salvo em Propriedades do script, com esse nome exato e valor não vazio; depois atualize e reabra o site.";
+          } else {
+            accessHelp.textContent =
+              "A autorização do aplicativo está ativa, mas sua conta não consegue abrir a planilha onde os projetos são armazenados. Peça ao responsável pelo sistema para compartilhar a planilha com seu e-mail Google.";
+          }
+          accessHelp.classList.toggle("hidden", !accessDenied && !configurationIssue);
+        }
+        if (authorizeLink) {
+          if (authorizeUrl) {
+            authorizeLink.href = authorizeUrl;
+            authorizeLink.classList.remove("hidden");
+          } else {
+            authorizeLink.classList.add("hidden");
+          }
+        }
+        if (loginButton) loginButton.classList.toggle("hidden", accessDenied || configurationIssue);
+        if (overlay) {
+          overlay.classList.remove("hidden");
+          overlay.classList.add("flex");
+        }
+        _authBlocked = true;
+        document.body.style.overflow = "hidden";
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function hideAuthOverlay() {
+        const overlay = document.getElementById("auth-block-overlay");
+        if (overlay) {
+          overlay.classList.add("hidden");
+          overlay.classList.remove("flex");
+        }
+        _authBlocked = false;
+        document.body.style.overflow = "";
+      }
+
+      function recarregarApp() {
+        window.location.reload();
+      }
+
+      function sairTrocarConta() {
+        sairContaGoogle();
+      }
+
+      function abrirSeletorContaGoogle() {
+        const continueUrl = encodeURIComponent(_webAppUrl || window.location.href);
+        window.open(
+          "https://accounts.google.com/AccountChooser?continue=" + continueUrl,
+          "_blank",
+          "noopener,noreferrer",
+        );
+      }
+
+      function sairContaGoogle() {
+        if (!confirm("O Google pode encerrar sua sessão em outras abas e serviços. Deseja continuar?")) {
+          return;
+        }
+        const continueUrl = encodeURIComponent(
+          "https://accounts.google.com/AccountChooser?continue=" +
+            encodeURIComponent(_webAppUrl || window.location.href),
+        );
+        window.open(
+          "https://accounts.google.com/Logout?continue=" + continueUrl,
+          "_blank",
+          "noopener,noreferrer",
+        );
+      }
+
+      function solicitarAutorizacaoGoogle() {
+        if (!window.google || !google.script || !google.script.run) {
+          alert("Não foi possível conectar ao Google Apps Script. Recarregue a página e tente novamente.");
+          return;
+        }
+
+        const authorizationWindow = window.open("about:blank", "_blank");
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result && result.authorizationUrl) {
+              if (authorizationWindow) {
+                authorizationWindow.location = result.authorizationUrl;
+              } else {
+                window.location.assign(result.authorizationUrl);
+              }
+              return;
+            }
+            if (authorizationWindow) authorizationWindow.close();
+            if (result && result.code === "PROJECT_ACCESS_DENIED") {
+              showAuthOverlay(result);
+            } else if (result && result.code === "CONFIGURATION_ERROR") {
+              showAuthOverlay(result);
+            } else if (result && result.ok) {
+              alert("O aplicativo já está autorizado para acessar os serviços solicitados pelo Google.");
+            } else {
+              alert((result && result.message) || "Não foi possível verificar a autorização. Tente novamente.");
+            }
+          })
+          .withFailureHandler((error) => {
+            if (authorizationWindow) authorizationWindow.close();
+            console.error("Falha ao verificar autorização:", error);
+            alert("Não foi possível verificar a autorização: " + (error.message || String(error)));
+          })
+          .pingAutorizacao();
+      }
+
+      function isAuthorizationFailure(value) {
+        if (!value) return false;
+        if (value.code === "AUTH_REQUIRED" || value.authRequired === true) {
+          return true;
+        }
+        if (value.code === "PROJECT_ACCESS_DENIED") return true;
+        const messages = [value.message, value.error];
+        if (Array.isArray(value.errors)) messages.push(...value.errors);
+        const message = messages.filter(Boolean).join(" ").toLowerCase();
+        return [
+          "authorization required",
+          "not authorized",
+          "permission denied",
+          "access denied",
+          "you do not have permission",
+          "needs authorization",
+          "unauthorized",
+          "permissão para chamar",
+          "permissão necessária",
+        ].some((term) => message.includes(term));
+      }
+
+      function handleProjectAccessFailure(error) {
+        if (!isAuthorizationFailure(error)) return false;
+        showAuthOverlay({
+          code: error && error.code === "PROJECT_ACCESS_DENIED"
+            ? "PROJECT_ACCESS_DENIED"
+            : "AUTH_REQUIRED",
+          authorizationUrl: error && error.authorizationUrl,
+        });
+        return true;
+      }
+
+      function initAuthCheck() {
+        if (!window.google || !google.script || !google.script.run) {
+          mostrarAreaHome();
+          return;
+        }
+
+        _authChecking = true;
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result && result.webAppUrl) {
+              _webAppUrl = result.webAppUrl;
+            }
+            _authChecking = false;
+            if (result && result.ok) {
+              if (result.data && result.data.webAppUrl) {
+                _webAppUrl = result.data.webAppUrl;
+              }
+              hideAuthOverlay();
+              mostrarAreaHome();
+            } else {
+              showAuthOverlay(result || {});
+            }
+          })
+          .withFailureHandler((error) => {
+            _authChecking = false;
+            console.error("Falha ao verificar autorização:", error);
+            showAuthOverlay({
+              code: isAuthorizationFailure(error)
+                ? "AUTH_REQUIRED"
+                : "AUTH_CHECK_FAILED",
+            });
+          })
+          .pingAutorizacao();
+      }
 
       // Função para alterar cor de status
       function alterarStatus(elemento) {
@@ -2204,10 +2487,15 @@
       }
 
       function carregarListaProjetos() {
+        if (_authBlocked || _authChecking) return;
         if (typeof google === "undefined" || !google.script) return;
 
         google.script.run
           .withSuccessHandler((projetos) => {
+            if (isAuthorizationFailure(projetos)) {
+              showAuthOverlay(projetos);
+              return;
+            }
             const listaCompleta = document.getElementById("lista-projetos");
             const listaRecentes = document.getElementById("lista-projetos-recentes");
 
@@ -2225,43 +2513,38 @@
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao listar projetos:", erro);
+            if (handleProjectAccessFailure(erro)) return;
             logarErroFrontend('Falha ao listar projetos', { 
               erro_mensagem: erro.message,
               erro_completo: String(erro)
             });
             
-            var mensagemErro = "Não foi possível carregar a lista de projetos.";
-            if (erro.message && erro.message.indexOf('SpreadsheetApp.openById') > -1) {
-              mensagemErro = "⚠️ Erro de Permissão: Você precisa autorizar este script.\n\nSolução:\n1. Faça logout\n2. Faça login novamente\n3. Clique em 'Autorizar' quando Google pedir\n4. Recarregue a página\n\nErro técnico: " + erro.message;
-            } else {
-              mensagemErro += "\n\nErro: " + erro.message;
-            }
-            
-            exibirErroSalvamento(mensagemErro);
+            exibirErroSalvamento(
+              "Não foi possível carregar a lista de projetos. " + erro.message,
+            );
           })
           .listarProjetosComMigracao();
       }
 
       function criarNovoProjeto() {
+        if (_authBlocked || _authChecking) return;
         const nome = prompt("Nome do novo projeto (ex.: nome da marca/cliente):");
         if (nome === null) return; // cancelado
         if (typeof google === "undefined" || !google.script) return;
 
         google.script.run
           .withSuccessHandler((projeto) => {
+            if (isAuthorizationFailure(projeto)) {
+              showAuthOverlay(projeto);
+              return;
+            }
             aplicarProjetoNaTela(projeto, null);
           })
           .withFailureHandler((erro) => {
             console.error("Erro ao criar projeto:", erro);
+            if (handleProjectAccessFailure(erro)) return;
             
-            var mensagemErro = "Falha ao criar o projeto.";
-            if (erro.message && erro.message.indexOf('SpreadsheetApp') > -1) {
-              mensagemErro = "⚠️ Erro de Permissão: Script sem autorização\n\nSolução:\n1. Faça logout\n2. Login novamente\n3. Autorize quando Google pedir\n4. Recarregue a página\n\nErro técnico: " + erro.message;
-            } else {
-              mensagemErro += "\n\nErro: " + erro.message;
-            }
-            
-            exibirErroSalvamento(mensagemErro);
+            exibirErroSalvamento("Falha ao criar o projeto. " + erro.message);
           })
           .criarProjeto(nome);
       }
@@ -2293,6 +2576,7 @@
       // Abre um projeto: busca metadados + conteúdo no backend e então
       // aplica o resultado na tela.
       function abrirProjetoNaTela(id) {
+        if (_authBlocked || _authChecking) return;
         if (typeof google === "undefined" || !google.script) return;
 
         exibirCarregando();
@@ -2300,12 +2584,19 @@
 
         google.script.run
           .withSuccessHandler((resultado) => {
+            if (isAuthorizationFailure(resultado)) {
+              showAuthOverlay(resultado);
+              ocultarCarregando();
+              completarProgressBar();
+              return;
+            }
             aplicarProjetoNaTela(resultado.projeto, resultado.conteudoJson);
             completarProgressBar();
           })
           .withFailureHandler((erro) => {
             ocultarCarregando();
             completarProgressBar();
+            if (handleProjectAccessFailure(erro)) return;
             console.error("Erro ao abrir projeto:", erro);
             logarErroFrontend('Falha ao abrir projeto', { 
               projeto_id: id,
@@ -2705,7 +2996,8 @@
       // específico (abrirProjetoNaTela), já que agora o mesmo login pode
       // ter vários projetos, próprios ou compartilhados.
       document.addEventListener("DOMContentLoaded", () => {
-        mostrarAreaHome();
+        mostrarArea("area-home");
+        initAuthCheck();
 
         // Rede de segurança: caso uma alteração pendente não tenha sido
         // salva pelo debounce (ex.: falha de rede pontual), tenta novamente
@@ -3005,11 +3297,11 @@
         }
 
         // Mostrar que está carregando
-        document.getElementById('diagnostico-info').textContent = 'Carregando informações do sistema...\n\n⚠️  Aviso de Permissões:\nSe é sua primeira vez usando este app, pode ser que uma janela de autorização apareça no Google.\nAutorize para que o script possa acessar suas pastas no Google Drive.';
+        document.getElementById('diagnostico-info').textContent = 'Carregando informações do sistema...\n\n⚠️ Aviso de permissões:\nAutorize o aplicativo para acessar a planilha de projetos quando o Google solicitar.';
         document.getElementById('diagnostico-logs').textContent = 'Carregando logs...';
 
         var timeoutId = setTimeout(() => {
-          document.getElementById('diagnostico-info').textContent = 'TIMEOUT: Servidor não respondeu em tempo hábil.\n\nPossíveis causas:\n1. A planilha não está compartilhada com você\n2. Você não autorizou o script na primeira vez\n3. Erro de permissões do Google Apps Script\n4. Falha de rede\n\nTente:\n- Fazer logout e login novamente\n- Recarregar a página\n- Entrar em contato com o administrador';
+          document.getElementById('diagnostico-info').textContent = 'TIMEOUT: Servidor não respondeu em tempo hábil.\n\nPossíveis causas:\n1. A planilha não está compartilhada com você\n2. O aplicativo ainda não foi autorizado\n3. Falha de rede\n\nTente novamente. Se o problema persistir, verifique a autorização do aplicativo ou fale com o administrador sobre o acesso à planilha.';
           document.getElementById('diagnostico-logs').textContent = 'Timeout ao aguardar resposta do servidor.';
         }, 15000); // 15 segundos de timeout
 
@@ -3018,7 +3310,7 @@
             clearTimeout(timeoutId);
             if (resultado === null || resultado === undefined) {
               console.warn('Resposta null/undefined de obterDiagnosticoSistema');
-              document.getElementById('diagnostico-info').textContent = 'Erro: Servidor retornou resposta vazia.\n\nPossível causa:\n- Você não tem permissão para acessar a planilha de projetos\n- Erro de autorização do Google Apps Script\n\nSolução:\n1. Fazer logout e login novamente\n2. Aceitar permissões quando solicitado\n3. Recarregar a página';
+              document.getElementById('diagnostico-info').textContent = 'Erro: O servidor retornou uma resposta vazia. Verifique a autorização do aplicativo e o compartilhamento da planilha de projetos.';
               document.getElementById('diagnostico-logs').textContent = '(sem dados)';
               return;
             }
@@ -3027,27 +3319,14 @@
           .withFailureHandler((erro) => {
             clearTimeout(timeoutId);
             console.error('Erro ao carregar diagnóstico:', erro);
+            if (handleProjectAccessFailure(erro)) {
+              document.getElementById('diagnostico-info').textContent = 'Acesso bloqueado. Siga as instruções da tela de autorização.';
+              document.getElementById('diagnostico-logs').textContent = 'Falha de autorização ou acesso à planilha.';
+              return;
+            }
             
             var mensagemErro = 'ERRO: ' + (erro.message || String(erro)) + '\n\n';
-            
-            // Detecta erro de permissão específico
-            if (erro.message && erro.message.indexOf('SpreadsheetApp.openById') > -1) {
-              mensagemErro += 'PROBLEMA IDENTIFICADO: Erro de Autorização do Apps Script\n\n';
-              mensagemErro += 'Causa: O script não tem permissão para acessar a planilha de projetos.\n\n';
-              mensagemErro += 'Como resolver:\n';
-              mensagemErro += '1. Faça LOGOUT da sua conta Google\n';
-              mensagemErro += '2. Faça LOGIN novamente\n';
-              mensagemErro += '3. Recarregue esta página\n';
-              mensagemErro += '4. O Google pedirá para você AUTORIZAR o script\n';
-              mensagemErro += '5. Clique em "Autorizar" e aceite as permissões\n';
-              mensagemErro += '6. Tente novamente\n\n';
-              mensagemErro += 'Se o problema persistir, contate o administrador.';
-            } else {
-              mensagemErro += 'Possíveis causas:\n';
-              mensagemErro += '- Você não tem acesso à planilha de projetos\n';
-              mensagemErro += '- Erro de permissões do Google Apps Script\n';
-              mensagemErro += '- Falha de rede';
-            }
+            mensagemErro += 'Possíveis causas: planilha indisponível, falta de compartilhamento com sua conta Google ou falha de rede. Se persistir, contate o administrador.';
             
             document.getElementById('diagnostico-info').textContent = mensagemErro;
             document.getElementById('diagnostico-logs').textContent = 'Erro técnico: ' + (erro.message || String(erro));

@@ -3,6 +3,16 @@
  * Camada de regras de negócio
  */
 
+function registrarEventoProjeto_(tipo, mensagem, meta) {
+  const entry = pushLog(tipo, mensagem, meta);
+  if (!repoSalvarLog(entry)) {
+    pushLog('ERROR', 'Não foi possível persistir evento na aba Logs', {
+      tipo: tipo,
+      mensagem: mensagem
+    });
+  }
+}
+
 function svcListarProjetos() {
   try {
     const projetos = repoListarProjetos();
@@ -50,12 +60,17 @@ function svcCriarProjeto(dadosProjeto) {
         : (Array.isArray(dadosProjeto.sharedWith) ? dadosProjeto.sharedWith : []),
       criadoEm: dadosProjeto.criadoEm || now,
       atualizadoEm: now,
+      atualizadoPor: Session.getActiveUser().getEmail() || '',
       proprietario: dadosProjeto.proprietario || dadosProjeto.owner || '',
       status: dadosProjeto.status || 'ativo'
     };
 
     const novoId = repoCriarProjeto(projeto);
-    pushLog('INFO', 'Projeto criado', { id: novoId, nome: projeto.nome });
+    registrarEventoProjeto_('criacao', 'Projeto criado', {
+      id: novoId,
+      projetoId: novoId,
+      nome: projeto.nome
+    });
 
     return responseOk({ id: novoId, projeto: projeto }, 'Projeto criado com sucesso');
   } catch (err) {
@@ -103,6 +118,7 @@ function svcSalvarProjeto(projetoId, dadosProjeto) {
           : (Array.isArray(existente.compartilhamentos) ? existente.compartilhamentos : [])),
       criadoEm: existente.criadoEm || dadosProjeto.criadoEm || now,
       atualizadoEm: now,
+      atualizadoPor: Session.getActiveUser().getEmail() || '',
       proprietario: dadosProjeto.proprietario !== undefined
         ? dadosProjeto.proprietario
         : (dadosProjeto.owner !== undefined ? dadosProjeto.owner : existente.proprietario || ''),
@@ -110,7 +126,11 @@ function svcSalvarProjeto(projetoId, dadosProjeto) {
     };
 
     repoAtualizarProjeto(found.rowIndex, projetoAtualizado);
-    pushLog('INFO', 'Projeto salvo', { id: projetoId, nome: projetoAtualizado.nome });
+    registrarEventoProjeto_('salvamento', 'Conteúdo salvo', {
+      id: projetoId,
+      projetoId: projetoId,
+      nome: projetoAtualizado.nome
+    });
 
     return responseOk({ id: projetoId, projeto: projetoAtualizado }, 'Projeto salvo com sucesso');
   } catch (err) {
@@ -131,7 +151,7 @@ function svcExcluirProjeto(projetoId) {
     const ok = repoExcluirProjeto(projetoId);
     if (!ok) return responseFail('Projeto não encontrado ou não pôde ser excluído', 'Não foi possível excluir');
     repoLimparRascunho(projetoId);
-    pushLog('INFO', 'Projeto excluído', { id: projetoId });
+    registrarEventoProjeto_('exclusao', 'Projeto excluído', { id: projetoId, projetoId: projetoId });
     return responseOk({ id: projetoId }, 'Projeto excluído com sucesso');
   } catch (err) {
     pushLog('ERROR', 'svcExcluirProjeto', { projetoId, error: err.toString() });
@@ -212,7 +232,7 @@ function svcResetarProjeto(projetoId, dadosPadrao) {
 
     repoAtualizarProjeto(found.rowIndex, projetoResetado);
     repoLimparRascunho(projetoId);
-    pushLog('INFO', 'Projeto resetado', { id: projetoId });
+    registrarEventoProjeto_('reset', 'Projeto resetado', { id: projetoId, projetoId: projetoId });
 
     return responseOk({ id: projetoId, projeto: projetoResetado }, 'Projeto resetado com sucesso');
   } catch (err) {
@@ -265,7 +285,12 @@ function svcCompartilharProjeto(payload) {
     });
 
     repoAtualizarProjeto(found.rowIndex, projetoAtualizado);
-    pushLog('INFO', 'Projeto compartilhado', { id: projetoId, email, papel });
+    registrarEventoProjeto_('compartilhamento', 'Projeto compartilhado', {
+      id: projetoId,
+      projetoId: projetoId,
+      email: email,
+      papel: papel
+    });
 
     return responseOk({ id: projetoId, compartilhamentos }, 'Compartilhamento atualizado');
   } catch (err) {
@@ -335,6 +360,7 @@ function svcGetDiagnostico() {
       scriptPropsSpreadsheetId: ssId ? '(configurado)' : '(não configurado)',
       sheets: [
         APP_CONFIG.SHEETS.PROJETOS,
+        APP_CONFIG.SHEETS.DADOS,
         APP_CONFIG.SHEETS.RASCUNHOS,
         APP_CONFIG.SHEETS.LOGS
       ],

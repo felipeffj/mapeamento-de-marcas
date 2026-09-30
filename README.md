@@ -56,24 +56,18 @@ mapeamento-de-marcas/
 
 > Recomenda-se usar [`clasp`](https://github.com/google/clasp) para versionar este projeto em Git e sincronizar com o Apps Script (`clasp push` / `clasp pull`), já que hoje o projeto não tem nenhum controle de versão nem pipeline de deploy.
 
-### ⚠️ Solução de Problemas: Erro "Você não tem permissão para chamar SpreadsheetApp.openById"
+### ⚠️ Solução de Problemas: autorização e acesso aos projetos
 
-Se um usuário vê o erro **"Você não tem permissão para chamar SpreadsheetApp.openById"**, significa que o Google Apps Script **não foi autorizado** pela primeira vez. Diferente de compartilhar a planilha no Google Drive, o Apps Script também requer autorização explícita de cada usuário.
+Se o usuário não autorizou o aplicativo, a página bloqueia as ações de projetos e informa o motivo. Clique em **Solicitar permissões**, aceite as permissões exibidas pelo Google e volte à aplicação; **Tentar novamente** recarrega o estado de acesso. A seção **Conta Google** na barra lateral mantém disponíveis, mesmo fora da tela de bloqueio, as ações **Entrar / trocar conta**, **Autorizar aplicativo** e **Sair da conta Google**. O logout encerra a sessão Google no navegador e pede confirmação antes de prosseguir.
 
-**Como resolver:**
+Há duas permissões diferentes:
 
-1. **Fazer logout** da conta Google.
-2. **Fazer login novamente**.
-3. **Recarregar a página** do mapeamento de marcas.
-4. Um diálogo do Google aparecerá pedindo para **autorizar o script** a acessar seus dados — clique **"Autorizar"** e aceite as permissões.
-5. Pronto — agora o usuário terá acesso aos projetos.
+- **Autorização do aplicativo:** cada usuário precisa autorizar o Apps Script a acessar os serviços solicitados. A tela de bloqueio oferece o fluxo de autorização do Google quando ele está pendente.
+- **Acesso à planilha:** se o aplicativo já está autorizado, mas a conta não tem acesso ao banco de projetos, a tela informa que a planilha precisa ser compartilhada pelo responsável do sistema. Fazer logout/login não substitui esse compartilhamento.
 
-**Por que isso acontece:**
+O Web App deve ser implantado como **"Executar como: usuário que acessa"** para manter a identidade e as permissões individuais. A verificação inicial diferencia autorização pendente, falta de acesso à planilha e banco de projetos ainda não configurado.
 
-- O Web App foi publicado como "Executar como: usuário que acessa", o que significa que cada usuário precisa autorizar o script para que ele possa acessar a planilha em seu nome. Essa é uma proteção de segurança do Google.
-- Simplesmente compartilhar a planilha no Google Drive não é suficiente — o script também precisa de permissão.
-
-**Dica:** Você pode verificar quem autorizou o script em **Google Account > Segurança > Apps e sites de terceiros > Gerenciar todos os apps autorizados**.
+Se a tela indicar que o banco não está configurado mesmo com `SPREADSHEET_ID` definido, ela agora informa se a execução encontrou a chave e um valor não vazio nas **Propriedades do script**, além de indicar se há um valor nos escopos de usuário/documento (que não substituem a propriedade de script). O valor da propriedade nunca é exibido. Confirme que a chave está escrita exatamente como `SPREADSHEET_ID`, sem espaços, e que a alteração foi salva. O ID do projeto em execução também é mostrado para diagnóstico.
 
 ---
 
@@ -105,10 +99,13 @@ Se um usuário vê o erro **"Você não tem permissão para chamar SpreadsheetAp
 
 ## Modelo de persistência e projetos compartilhados
 
-O "banco de dados" é uma **Planilha Google** ("Mapeamento de Marcas - Banco de Projetos"), criada automaticamente na primeira execução e referenciada por `PropertiesService.getScriptProperties()` (visível a todos os usuários do script, ao contrário das antigas *User Properties*, que eram isoladas por conta). Ela tem duas abas:
+O "banco de dados" é uma **Planilha Google** ("Mapeamento de Marcas - Banco de Projetos"), criada automaticamente na primeira execução e referenciada por `PropertiesService.getScriptProperties()` (visível a todos os usuários do script, ao contrário das antigas *User Properties*, que eram isoladas por conta). A estrutura principal tem três abas, criadas automaticamente ao inicializar o repositório:
 
 - **`Projetos`** (metadados/ACL): 1 linha por projeto — `ID`, `Nome`, `DonoEmail`, `ColaboradoresJSON` (lista de `{ email, papel }`, onde `papel` é `"edicao"` ou `"visualizacao"`), `CriadoEm`, `AtualizadoEm`, `AtualizadoPorEmail`.
-- **`Dados`**: 1 linha por projeto — `ProjetoID`, `ConteudoBase64` (o JSON `{ conteudoHTML, timestamp }` do documento, **comprimido com gzip e codificado em base64**, reaproveitando `comprimirEcodificar_()`/`descomprimir_()` já existentes).
+- **`Dados`**: 1 linha por projeto — `ProjetoID`, `ConteudoBase64` (o JSON do documento, comprimido com gzip e codificado em base64).
+- **`Logs`**: eventos de sistema com data/hora, usuário, tipo, projeto, descrição e metadados JSON.
+
+Planilhas que já tenham o formato modular mais recente (JSON de dados junto à linha de `Projetos`) são migradas automaticamente para as abas `Projetos` e `Dados` no primeiro acesso; os metadados existentes são mantidos e o conteúdo é movido para gzip+base64. A aba antiga só é reescrita depois de preparar o conteúdo comprimido, e a migração não apaga uma aba auxiliar como `Página1`.
 
 **Identidade do usuário**: `obterUsuarioAtual()` usa `Session.getActiveUser().getEmail()` (com *fallback* para `Session.getEffectiveUser()`), o que funciona de forma confiável quando o app é implantado dentro do domínio Google Workspace da organização.
 
@@ -257,4 +254,3 @@ Em ambos os casos, o fluxo final é: sincronizar `<textarea>`s sem disparar o ob
    - **Adotar `clasp` + Git** (#7.7): inicializar um repositório Git para este projeto e configurar `clasp` (`clasp clone`/`clasp push`/`clasp pull`) para sincronizar com o Apps Script, permitindo histórico de commits, revisão de mudanças e rollback — hoje o único "histórico" é a memória de quem editou o script diretamente no editor do Apps Script.
    - **Migração para modelo de dados estruturado** (JSON com arrays de módulos/lojas/exceções, renderizando o HTML a partir dele): continua sendo uma melhoria de longo prazo que habilitaria relatórios, validações de dados e exportações adicionais (ex.: planilha, dashboard) — considerar apenas se o app crescer em complexidade a ponto de justificar o esforço de reescrita.
    - **Bloqueio otimista de edição por projeto**: se o uso em dupla evoluir para mais colaboradores simultâneos, avaliar um indicador de "em edição por X" com expiração automática, antes de partir para algo mais complexo como merge de campos.
-

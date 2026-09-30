@@ -4,6 +4,95 @@
  * MANTÉM nomes existentes para compatibilidade retroativa
  */
 
+function pingAutorizacao() {
+  let authorizationInfo;
+  try {
+    authorizationInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  } catch (err) {
+    pushLog('ERROR', 'pingAutorizacao(authorization)', { error: err.toString() });
+    return {
+      ok: false,
+      code: 'AUTH_REQUIRED',
+      message: 'Este aplicativo precisa de autorização para acessar os projetos.'
+    };
+  }
+
+  if (authorizationInfo.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
+    return {
+      ok: false,
+      code: 'AUTH_REQUIRED',
+      authorizationUrl: authorizationInfo.getAuthorizationUrl(),
+      webAppUrl: ScriptApp.getService().getUrl(),
+      message: 'Este aplicativo precisa de autorização para acessar os projetos.'
+    };
+  }
+
+  try {
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const scriptPropertyValue = scriptProperties.getProperty('SPREADSHEET_ID');
+    const spreadsheetId = getSpreadsheetId();
+    const spreadsheet = spreadsheetId
+      ? SpreadsheetApp.openById(spreadsheetId)
+      : SpreadsheetApp.getActiveSpreadsheet();
+
+    if (!spreadsheet) {
+      const scriptPropertyKeys = Object.keys(scriptProperties.getProperties());
+      let userPropertyConfigured = false;
+      let documentPropertyConfigured = false;
+
+      try {
+        const userPropertyValue = PropertiesService.getUserProperties()
+          .getProperty('SPREADSHEET_ID');
+        userPropertyConfigured = Boolean(userPropertyValue && userPropertyValue.trim());
+      } catch (err) {
+        pushLog('WARN', 'pingAutorizacao(userProperties)', { error: err.toString() });
+      }
+
+      try {
+        const documentPropertyValue = PropertiesService.getDocumentProperties()
+          .getProperty('SPREADSHEET_ID');
+        documentPropertyConfigured = Boolean(
+          documentPropertyValue && documentPropertyValue.trim()
+        );
+      } catch (err) {
+        pushLog('WARN', 'pingAutorizacao(documentProperties)', { error: err.toString() });
+      }
+
+      return {
+        ok: false,
+        code: 'CONFIGURATION_ERROR',
+        message: 'A execução atual do aplicativo não encontrou uma planilha de projetos.',
+        diagnostics: {
+          scriptPropertyExists: scriptPropertyValue !== null,
+          scriptPropertyHasValue: Boolean(
+            scriptPropertyValue && scriptPropertyValue.trim()
+          ),
+          similarScriptPropertyKeyExists: scriptPropertyKeys.some(
+            key => key !== 'SPREADSHEET_ID' &&
+              key.trim().toUpperCase() === 'SPREADSHEET_ID'
+          ),
+          userPropertyHasValue: userPropertyConfigured,
+          documentPropertyHasValue: documentPropertyConfigured,
+          activeSpreadsheetAvailable: false,
+          runtimeProjectId: ScriptApp.getScriptId()
+        }
+      };
+    }
+
+    return responseOk({
+      authorized: true,
+      webAppUrl: ScriptApp.getService().getUrl()
+    });
+  } catch (err) {
+    pushLog('ERROR', 'pingAutorizacao(spreadsheet)', { error: err.toString() });
+    return {
+      ok: false,
+      code: 'PROJECT_ACCESS_DENIED',
+      message: 'A conta atual não conseguiu acessar a planilha de projetos.'
+    };
+  }
+}
+
 // Projetos
 function listarProjetos() {
   try {
@@ -12,6 +101,43 @@ function listarProjetos() {
     pushLog('ERROR', 'listarProjetos(handler)', { error: err.toString() });
     return responseFail('Erro interno', 'Falha ao listar projetos');
   }
+}
+
+function listarProjetosComMigracao() {
+  const result = svcListarProjetos();
+  if (!result || !result.ok) {
+    const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao listar projetos');
+  }
+
+  const emailAtual = safeString(Session.getActiveUser().getEmail()).trim().toLowerCase();
+  return result.data.map(projeto => {
+    const compartilhamentos = Array.isArray(projeto.compartilhamentos)
+      ? projeto.compartilhamentos
+      : [];
+    const compartilhamentoAtual = compartilhamentos.find(item =>
+      safeString(item.email).trim().toLowerCase() === emailAtual
+    );
+    const proprietario = safeString(projeto.proprietario || projeto.owner).trim();
+    const papel = proprietario.toLowerCase() === emailAtual
+      ? 'dono'
+      : compartilhamentoAtual
+        ? (['editor', 'edicao'].includes(safeString(compartilhamentoAtual.papel).toLowerCase())
+          ? 'edicao'
+          : 'visualizacao')
+        : 'visualizacao';
+
+    return Object.assign({}, projeto, {
+      dono: proprietario || 'Não informado',
+      meuPapel: papel,
+      atualizadoPor: projeto.atualizadoPor || ''
+    });
+  }).filter(projeto =>
+    projeto.meuPapel !== 'visualizacao' ||
+    projeto.compartilhamentos.some(item =>
+      safeString(item.email).trim().toLowerCase() === emailAtual
+    )
+  );
 }
 
 function carregarProjeto(projetoId) {
@@ -23,11 +149,60 @@ function carregarProjeto(projetoId) {
   }
 }
 
+function abrirProjeto(projetoId) {
+  const result = svcCarregarProjeto(projetoId);
+  if (!result || !result.ok || !result.data) {
+    const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao carregar projeto');
+  }
+
+  const projeto = result.data;
+  const emailAtual = safeString(Session.getActiveUser().getEmail()).trim().toLowerCase();
+  const compartilhamentoAtual = (projeto.compartilhamentos || []).find(item =>
+    safeString(item.email).trim().toLowerCase() === emailAtual
+  );
+  const proprietario = safeString(projeto.proprietario || projeto.owner).trim();
+  const meuPapel = proprietario.toLowerCase() === emailAtual
+    ? 'dono'
+    : compartilhamentoAtual
+      ? (['editor', 'edicao'].includes(safeString(compartilhamentoAtual.papel).toLowerCase())
+        ? 'edicao'
+        : 'visualizacao')
+      : 'visualizacao';
+
+  return {
+    projeto: Object.assign({}, projeto, {
+      dono: proprietario || 'Não informado',
+      meuPapel: meuPapel,
+      colaboradores: projeto.compartilhamentos || []
+    }),
+    conteudoJson: safeJsonStringify(projeto.dados || {})
+  };
+}
+
 function criarProjeto(dadosProjeto) {
+  const legado = typeof dadosProjeto === 'string';
+  const dados = legado
+    ? {
+      nome: dadosProjeto,
+      proprietario: safeString(Session.getActiveUser().getEmail()).trim().toLowerCase()
+    }
+    : dadosProjeto;
   try {
-    return svcCriarProjeto(dadosProjeto);
+    const result = svcCriarProjeto(dados || {});
+    if (!legado) return result;
+    if (!result || !result.ok || !result.data || !result.data.projeto) {
+      const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+      throw new Error(errors || 'Falha ao criar projeto');
+    }
+    return Object.assign({}, result.data.projeto, {
+      dono: result.data.projeto.proprietario || 'Não informado',
+      meuPapel: 'dono',
+      colaboradores: []
+    });
   } catch (err) {
     pushLog('ERROR', 'criarProjeto(handler)', { error: err.toString() });
+    if (legado) throw err;
     return responseFail('Erro interno', 'Falha ao criar projeto');
   }
 }
@@ -120,13 +295,95 @@ function resetarProjeto(projetoId, dadosPadrao) {
 }
 
 // Compartilhamento
-function compartilharProjeto(payload) {
+function compartilharProjeto(payload, email, papel) {
+  const legado = arguments.length > 1;
+  const request = legado
+    ? {
+      projetoId: payload,
+      email: email,
+      papel: ['visualizacao', 'leitor'].includes(safeString(papel).toLowerCase())
+        ? 'leitor'
+        : 'editor'
+    }
+    : payload;
   try {
-    return svcCompartilharProjeto(payload);
+    const result = svcCompartilharProjeto(request);
+    if (!legado) return result;
+    if (!result || !result.ok || !result.data) {
+      const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+      throw new Error(errors || 'Falha ao compartilhar projeto');
+    }
+    return result.data.compartilhamentos;
   } catch (err) {
     pushLog('ERROR', 'compartilharProjeto(handler)', { error: err.toString() });
+    if (legado) throw err;
     return responseFail('Erro interno', 'Falha ao compartilhar projeto');
   }
+}
+
+function removerColaborador(projetoId, email) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const found = repoBuscarProjetoPorId(projetoId);
+    if (!found || !found.registro) throw new Error('Projeto não encontrado');
+
+    const compartilhamentos = (found.registro.compartilhamentos || []).filter(item =>
+      safeString(item.email).trim().toLowerCase() !== safeString(email).trim().toLowerCase()
+    );
+    repoAtualizarProjeto(found.rowIndex, Object.assign({}, found.registro, {
+      compartilhamentos: compartilhamentos,
+      atualizadoEm: nowISO()
+    }));
+    return compartilhamentos;
+  } catch (err) {
+    pushLog('ERROR', 'removerColaborador(handler)', {
+      projetoId: projetoId,
+      error: err.toString()
+    });
+    throw err;
+  } finally {
+    try { lock.releaseLock(); } catch (err) {}
+  }
+}
+
+function salvarProjetoAtual(projetoId, conteudoJson) {
+  const loaded = svcCarregarProjeto(projetoId);
+  if (!loaded || !loaded.ok || !loaded.data) {
+    const errors = loaded && Array.isArray(loaded.errors) ? loaded.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao carregar projeto para salvar');
+  }
+
+  const projeto = loaded.data;
+  const dados = typeof conteudoJson === 'string'
+    ? safeJsonParse(conteudoJson, {})
+    : (conteudoJson || {});
+  const saved = svcSalvarProjeto(projetoId, {
+    nome: projeto.nome,
+    descricao: projeto.descricao,
+    dados: dados,
+    compartilhamentos: projeto.compartilhamentos || [],
+    proprietario: projeto.proprietario || '',
+    status: projeto.status || 'ativo'
+  });
+  if (!saved || !saved.ok || !saved.data) {
+    const errors = saved && Array.isArray(saved.errors) ? saved.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao salvar projeto');
+  }
+
+  return {
+    atualizadoEm: saved.data.projeto.atualizadoEm,
+    atualizadoPor: safeString(Session.getActiveUser().getEmail())
+  };
+}
+
+function resetarProjetoAtual(projetoId) {
+  const result = svcResetarProjeto(projetoId, {});
+  if (!result || !result.ok) {
+    const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao resetar projeto');
+  }
+  return result;
 }
 
 // Logs / Diagnóstico
@@ -160,6 +417,53 @@ function getDiagnostico() {
   } catch (err) {
     return responseFail('Erro interno', 'Falha ao obter diagnóstico');
   }
+}
+
+function obterDiagnosticoSistema() {
+  const result = svcGetDiagnostico();
+  if (!result || !result.ok) {
+    const errors = result && Array.isArray(result.errors) ? result.errors.join('; ') : '';
+    throw new Error(errors || 'Falha ao obter diagnóstico');
+  }
+
+  const projects = listarProjetosComMigracao();
+  const logsResult = svcListarLogs(30);
+  const logs = logsResult && logsResult.ok && Array.isArray(logsResult.data)
+    ? logsResult.data
+    : [];
+
+  return Object.assign({}, result.data, {
+    usuario: safeString(Session.getActiveUser().getEmail()) || '(desconhecido)',
+    total_projetos_do_usuario: projects.length,
+    projetos: projects.map(projeto => ({
+      id: projeto.id,
+      nome: projeto.nome,
+      dono: projeto.dono,
+      meu_papel: projeto.meuPapel,
+      colaboradores_qtd: (projeto.compartilhamentos || []).length,
+      criado_em: projeto.criadoEm || '',
+      atualizado_em: projeto.atualizadoEm || ''
+    })),
+    logs: {
+      sucesso: true,
+      total: logs.length,
+      logs: logs.map(log => ({
+        data_hora: log.ts || '',
+        usuario: '',
+        tipo: log.level || 'INFO',
+        id_projeto: log.meta && log.meta.projetoId || '',
+        descricao: log.message || '',
+        extra: log.meta || null
+      }))
+    }
+  });
+}
+
+function logarErro_(projetoId, mensagem, detalhes) {
+  return salvarLog('ERROR', mensagem, {
+    projetoId: projetoId || null,
+    detalhes: detalhes || {}
+  });
 }
 
 // Alias p/ compatibilidade (se front chamar nomes diferentes)
