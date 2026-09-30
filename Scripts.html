@@ -1,0 +1,2812 @@
+<script>
+  // Initialize Lucide Icons
+  lucide.createIcons();
+
+  // =========================
+  // AUTH / PERMISSÕES
+  // =========================
+  let _webAppUrl = "";
+  let _authChecked = false;
+  let _authBlocked = false;
+
+  function showAuthOverlay() {
+    const el = document.getElementById("auth-block-overlay");
+    if (el) {
+      el.classList.remove("hidden");
+    }
+    _authBlocked = true;
+    document.body.style.overflow = "hidden";
+  }
+
+  function hideAuthOverlay() {
+    const el = document.getElementById("auth-block-overlay");
+    if (el) {
+      el.classList.add("hidden");
+    }
+    _authBlocked = false;
+    document.body.style.overflow = "";
+  }
+
+  function recarregarApp() {
+    window.location.reload();
+  }
+
+  function concederPermissoes() {
+    const url = _webAppUrl || window.location.href;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function sairTrocarConta(event) {
+    if (event) event.preventDefault();
+    const baseLogout = "https://accounts.google.com/Logout";
+    const continueUrl = encodeURIComponent(_webAppUrl || window.location.href);
+    const logoutUrl = baseLogout + "?continue=" + continueUrl;
+    window.open(logoutUrl, "_blank", "noopener,noreferrer");
+  }
+
+  // Detecta AUTH_REQUIRED em resposta padronizada {ok, code, errors, message}
+  function isAuthErrorLike(res) {
+    if (!res || typeof res !== "object") return false;
+
+    if (res.code === "AUTH_REQUIRED") return true;
+    if (res.authRequired === true) return true;
+
+    let msgs = [];
+    if (res.message) msgs.push(res.message);
+    if (Array.isArray(res.errors)) msgs = msgs.concat(res.errors);
+    const text = msgs.join(" ").toLowerCase();
+
+    const keywords = [
+      "permissões necessárias",
+      "authorization required",
+      "not authorized",
+      "permission denied",
+      "access denied",
+      "you do not have permission",
+      "needs authorization",
+      "unauthorized",
+    ];
+
+    return keywords.some((k) => text.indexOf(k) >= 0);
+  }
+
+  // Detecta AUTH_REQUIRED em falha do google.script.run
+  function isAuthErrorClient(err) {
+    if (!err) return false;
+    const msg = String(err.message || err.toString() || "").toLowerCase();
+    const keys = [
+      "authorization required",
+      "not authorized",
+      "permission denied",
+      "access denied",
+      "you do not have permission",
+      "needs authorization",
+      "unauthorized",
+      "script error: authorization",
+      "authorization is required",
+    ];
+    return keys.some((k) => msg.indexOf(k) >= 0);
+  }
+
+  // WRAPPERS - ESSENCIAL: embrulham as funções dos handlers
+  function wrapSuccessHandler(originalHandler) {
+    if (typeof originalHandler !== "function") {
+      // Handler vazio: só checa auth
+      return function (result) {
+        if (result && typeof result === "object") {
+          if (isAuthErrorLike(result)) {
+            showAuthOverlay();
+            if (typeof logDiagnostico === "function") {
+              logDiagnostico(
+                "AUTH_REQUIRED (success-wrapper-sem-handler)",
+                result,
+              );
+            }
+            return;
+          }
+        }
+      };
+    }
+
+    return function (result) {
+      // 1) Checa primeiro se é erro de autorização
+      if (result && typeof result === "object") {
+        if (isAuthErrorLike(result)) {
+          showAuthOverlay();
+          if (typeof logDiagnostico === "function") {
+            logDiagnostico("AUTH_REQUIRED (success)", result);
+          }
+          return; // BLOQUEIA: não chama handler original
+        }
+      }
+      // 2) Se não for auth, chama handler original normalmente
+      originalHandler(result);
+    };
+  }
+
+  function wrapFailureHandler(originalHandler) {
+    if (typeof originalHandler !== "function") {
+      return function (err) {
+        if (isAuthErrorClient(err)) {
+          showAuthOverlay();
+          if (typeof logDiagnostico === "function") {
+            logDiagnostico("AUTH_REQUIRED (failure-wrapper-sem-handler)", err);
+          }
+          return;
+        }
+      };
+    }
+
+    return function (err) {
+      if (isAuthErrorClient(err)) {
+        showAuthOverlay();
+        if (typeof logDiagnostico === "function") {
+          logDiagnostico("AUTH_REQUIRED (failure)", err);
+        }
+        return; // BLOQUEIA: não chama handler original
+      }
+      originalHandler(err);
+    };
+  }
+
+  // Helper opcional (pode usar no futuro, não obriga refatorar tudo)
+  function runGs(serverFnName) {
+    if (_authBlocked) {
+      return {
+        withSuccessHandler: function () {
+          return this;
+        },
+        withFailureHandler: function () {
+          return this;
+        },
+      };
+    }
+    if (!window.google || !google.script || !google.script.run) {
+      return {
+        withSuccessHandler: function () {
+          return this;
+        },
+        withFailureHandler: function () {
+          return this;
+        },
+      };
+    }
+    const fn = google.script.run[serverFnName];
+    if (typeof fn !== "function") {
+      return {
+        withSuccessHandler: function () {
+          return this;
+        },
+        withFailureHandler: function () {
+          return this;
+        },
+      };
+    }
+    return fn.apply(
+      google.script.run,
+      Array.prototype.slice.call(arguments, 1),
+    );
+  }
+
+  // Inicialização de auth
+  function initAuthCheck() {
+    if (_authChecked) return;
+    _authChecked = true;
+
+    // 1) URL do Web App
+    if (
+      window.google &&
+      google.script &&
+      google.script.run &&
+      google.script.run.obterUrlWebApp
+    ) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.ok && res.data && res.data.url) {
+            _webAppUrl = res.data.url;
+          } else {
+            _webAppUrl = window.location.href;
+          }
+        })
+        .withFailureHandler(function () {
+          _webAppUrl = window.location.href;
+        })
+        .obterUrlWebApp();
+    } else {
+      _webAppUrl = window.location.href;
+    }
+
+    // 2) Ping de autorização
+    if (
+      window.google &&
+      google.script &&
+      google.script.run &&
+      google.script.run.pingAutorizacao
+    ) {
+      google.script.run
+        .withSuccessHandler(
+          wrapSuccessHandler(function (res) {
+            if (res && res.ok) {
+              hideAuthOverlay();
+            }
+          }),
+        )
+        .withFailureHandler(wrapFailureHandler(function () {}))
+        .pingAutorizacao();
+    }
+  }
+
+  // Função para alterar cor de status
+  function alterarStatus(elemento) {
+    const statusAtual = elemento.textContent.trim().toUpperCase();
+    let novoStatus = "";
+    let novaClasse = "";
+
+    switch (statusAtual) {
+      case "SIM":
+        novoStatus = "NÃO";
+        novaClasse = "bg-slate-100 text-slate-600";
+        break;
+      case "NÃO":
+        novoStatus = "SIM";
+        novaClasse = "bg-emerald-100 text-emerald-800";
+        break;
+      default:
+        novoStatus = "SIM";
+        novaClasse = "bg-emerald-100 text-emerald-800";
+    }
+
+    elemento.textContent = novoStatus;
+    elemento.className = `text-xs font-semibold px-2.5 py-0.5 rounded ${novaClasse}`;
+  }
+
+  // Tab Switcher Logic
+  function switchTab(tabId) {
+    document.querySelectorAll(".tab-content").forEach((content) => {
+      content.classList.add("hidden");
+    });
+
+    document.querySelectorAll(".tab-button").forEach((btn) => {
+      btn.classList.remove("tab-active");
+      btn.classList.add("text-slate-500");
+    });
+
+    document.getElementById(`content-${tabId}`).classList.remove("hidden");
+
+    const activeBtn = document.getElementById(`tab-${tabId}`);
+    activeBtn.classList.add("tab-active");
+    activeBtn.classList.remove("text-slate-500");
+
+    fecharSidebarMobile();
+  }
+
+  // Função para extrair o HTML totalmente limpo e pronto para o Jira.
+  // Exporta apenas o conteúdo de #documento-container (não o <html>/<head>
+  // inteiro): evita levar para o Jira os <script> de CDN (Tailwind/
+  // Lucide), o @import de fonte do Google e toda a lógica JS inline, que
+  // não fazem sentido fora do Apps Script e só poluem o HTML colado.
+  function obterHTMLTratado() {
+    // Mesma cautela de obterEstadoGeralJSON(): sincronizar as textareas
+    // não deve ser tratado como uma edição do usuário pelo observador de
+    // auto-save (evita disparar um save desnecessário a cada exportação).
+    executarSemObservarAlteracoes(() => {
+      document.querySelectorAll("textarea").forEach((textarea) => {
+        textarea.textContent = textarea.value;
+      });
+    });
+
+    const container = document.getElementById("documento-container");
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll(".tab-content").forEach((tab) => {
+      tab.classList.remove("hidden");
+    });
+
+    clone.querySelectorAll("[contenteditable]").forEach((el) => {
+      el.removeAttribute("contenteditable");
+    });
+
+    // Remove qualquer <script> porventura clonado dentro do container.
+    clone.querySelectorAll("script").forEach((script) => script.remove());
+
+    // Remove atributos de interatividade que ficam "mortos" sem a lógica
+    // JS da aplicação (onclick/oninput/onchange não têm mais efeito).
+    const atributosParaRemover = ["onclick", "oninput", "onchange"];
+    clone.querySelectorAll("*").forEach((el) => {
+      atributosParaRemover.forEach((attr) => el.removeAttribute(attr));
+    });
+
+    // Os ícones Lucide (<i data-lucide="...">) ficam vazios sem o script
+    // do Lucide para renderizá-los — remove o atributo para não deixar
+    // marcação morta/confusa no HTML colado.
+    clone.querySelectorAll("[data-lucide]").forEach((el) => {
+      el.removeAttribute("data-lucide");
+    });
+
+    // Documento HTML mínimo e autocontido: sem CDNs externos, sem script,
+    // com apenas o CSS necessário para preservar a leitura do conteúdo
+    // (a estilização completa via Tailwind não é reproduzível fora dele).
+    return (
+      "<!DOCTYPE html>\n" +
+      '<html lang="pt-BR">\n' +
+      "<head>\n" +
+      '  <meta charset="UTF-8" />\n' +
+      "  <title>Mapeamento de Marcas</title>\n" +
+      "  <style>\n" +
+      "    body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; }\n" +
+      "    table { border-collapse: collapse; width: 100%; }\n" +
+      "    th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }\n" +
+      "  </style>\n" +
+      "</head>\n" +
+      "<body>\n" +
+      clone.outerHTML +
+      "\n</body>\n</html>"
+    );
+  }
+
+  // Copia o HTML limpo para a Área de Transferência
+  function copiarHTMLJira() {
+    const htmlLimpo = obterHTMLTratado();
+
+    navigator.clipboard
+      .writeText(htmlLimpo)
+      .then(() => {
+        mostrarToast(
+          "HTML Copiado com Sucesso!",
+          "Cole o código diretamente dentro do Jira.",
+        );
+      })
+      .catch((err) => {
+        alert("Erro ao copiar HTML: " + err);
+      });
+  }
+
+  // Baixa o HTML modificado como arquivo
+  function baixarHTML() {
+    const htmlLimpo = obterHTMLTratado();
+    const blob = new Blob([htmlLimpo], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mapeamento_de_marcas_editado.html";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // --- Exportação para Wiki Markup (Confluence) -----------------------
+  // Gera, a partir dos dados atuais do Nível 1, um texto pronto para ser
+  // colado dentro da macro "Markup" do Confluence (aceita a sintaxe
+  // clássica de wiki markup: {panel}, {status}, {warning}, {note},
+  // {expand}, {code}, tabelas "||cabeçalho||" etc.). O editor novo do
+  // Confluence não converte esse texto automaticamente se colado direto
+  // no corpo da página — é necessário inserir a macro "Markup" e colar
+  // o conteúdo dentro dela.
+
+  // Escapa caracteres que têm significado especial no wiki markup do
+  // Confluence ({, }, [, ]) para que textos livres digitados pelo
+  // analista não quebrem a macro gerada.
+  function escaparWikiMarkup(texto) {
+    return (texto || "").replace(/([{}[\]])/g, "\\$1");
+  }
+
+  // Extrai o texto de um elemento pelo id, com fallback para um valor
+  // padrão caso o elemento não exista ou ainda esteja com o placeholder
+  // original (ex.: "[Nome da Marca]").
+  function obterTextoCampo(id, valorPadrao = "") {
+    const el = document.getElementById(id);
+    if (!el) return valorPadrao;
+    const texto = el.textContent.trim();
+    if (!texto) return valorPadrao;
+    if (
+      /^\s*\[\s*(nome\s+da\s+marca|ex:.*?|breve\s+resumo.*?)\s*\]\s*$/i.test(
+        texto,
+      )
+    ) {
+      return valorPadrao;
+    }
+    return texto;
+  }
+
+  // Extrai o nome da marca / projeto com resiliência:
+  // 1. Tenta pelo ID oficial 'campo-nome-marca-projeto'.
+  // 2. Se o ID foi removido acidentalmente por edição ou ausente em
+  //    rascunho antigo, localiza semanticamente o card de "Nome da Marca"
+  //    na seção Visão Geral do Projeto.
+  // 3. Só descarta o valor se for exatamente o placeholder padrão
+  //    ("[Nome da Marca]") ou vazio — nomes preenchidos pelo usuário
+  //    (inclusive com colchetes ou caracteres especiais) são preservados.
+  function obterNomeMarca(valorPadrao = "Marca não informada") {
+    const porId = document.getElementById("campo-nome-marca-projeto");
+    if (porId) {
+      const texto = porId.textContent.trim();
+      if (!texto || /^\s*\[\s*nome\s+da\s+marca\s*\]\s*$/i.test(texto)) {
+        return valorPadrao;
+      }
+      return texto;
+    }
+
+    // Fallback semântico (usado apenas se porId não existir no DOM):
+    const rotulos = Array.from(
+      document.querySelectorAll("span, strong, label, p, div"),
+    );
+    const rotuloMarca = rotulos.find((el) => {
+      const t = el.textContent.trim().toLowerCase();
+      return (
+        t === "nome da marca / projeto" ||
+        t === "nome da marca" ||
+        t === "marca / projeto"
+      );
+    });
+
+    if (rotuloMarca) {
+      const containerCampo = rotuloMarca.parentElement;
+      if (containerCampo) {
+        const editavel =
+          containerCampo.querySelector("[contenteditable]") ||
+          containerCampo.querySelector("span:not(.text-xs), p");
+        if (editavel) {
+          const texto = editavel.textContent.trim();
+          if (texto && !/^\s*\[\s*nome\s+da\s+marca\s*\]\s*$/i.test(texto)) {
+            return texto;
+          }
+        }
+      }
+    }
+
+    return valorPadrao;
+  }
+
+  // Localiza um elemento estrutural (tabela, lista etc.) de forma resiliente:
+  // primeiro pelo ID oficial; se não encontrar (ex.: rascunho antigo sem IDs
+  // ou mutação no DOM), busca pela section cujo cabeçalho contenha o termo.
+  function obterElementoSecao(
+    idPreferencial,
+    termoTitulo,
+    seletorInterno,
+    containerRaiz,
+  ) {
+    if (idPreferencial) {
+      const el = document.getElementById(idPreferencial);
+      if (el) return el;
+    }
+    const raiz = containerRaiz || document;
+    const secoes = Array.from(raiz.querySelectorAll("section"));
+    for (const secao of secoes) {
+      const textoCompleto = secao.textContent.toLowerCase();
+      if (textoCompleto.includes(termoTitulo.toLowerCase())) {
+        const el = secao.querySelector(seletorInterno);
+        if (el) return el;
+      }
+    }
+    return null;
+  }
+
+  // Garante que os IDs estruturais essenciais estejam atribuídos nos
+  // elementos correspondentes do DOM. Útil para recuperar IDs que tenham
+  // sido perdidos durante edição em contenteditable ou que não existiam
+  // em rascunhos legados salvos na nuvem.
+  function assegurarIdsEstruturais() {
+    const nivel1 = document.getElementById("content-nivel1");
+    const nivel2 = document.getElementById("content-nivel2");
+
+    if (nivel1) {
+      // Campos da Visão Geral do Projeto
+      const mapeamentoCampos = [
+        {
+          id: "campo-nome-marca-projeto",
+          termos: ["nome da marca", "marca / projeto"],
+        },
+        {
+          id: "campo-numero-franquia",
+          termos: ["número da franquia", "numero da franquia", "franquia"],
+        },
+        { id: "campo-servidor-marca", termos: ["servidor"] },
+        {
+          id: "campo-contato-franqueadora",
+          termos: ["nome / cargo / telefone / email"],
+        },
+        { id: "campo-analista-projeto", termos: ["analista de projeto"] },
+        {
+          id: "campo-analistas-implantacao",
+          termos: ["analistas de implantação", "analistas de implantacao"],
+        },
+        {
+          id: "campo-ecs-responsavel",
+          termos: ["ecs responsável", "ecs responsavel"],
+        },
+        {
+          id: "campo-qtd-lojas-inicial",
+          termos: [
+            "qtd. lojas inicial",
+            "qtd lojas inicial",
+            "quantidade de lojas",
+          ],
+        },
+        {
+          id: "campo-descricao-operacao",
+          termos: ["descrição da operação", "descricao da operacao"],
+        },
+      ];
+
+      const rotulos = Array.from(
+        nivel1.querySelectorAll("span, strong, label, div"),
+      );
+      mapeamentoCampos.forEach(({ id, termos }) => {
+        if (!document.getElementById(id)) {
+          const rotulo = rotulos.find((el) => {
+            const t = el.textContent.trim().toLowerCase();
+            return termos.some((termo) => t.includes(termo));
+          });
+          if (rotulo) {
+            const card = rotulo.closest(".bg-slate-50") || rotulo.parentElement;
+            if (card) {
+              const editavel =
+                card.querySelector("[contenteditable]") ||
+                card.querySelector("span:not(.text-xs), p");
+              if (editavel) editavel.id = id;
+            }
+          }
+        }
+      });
+
+      // Seções do Nível 1
+      if (!document.getElementById("tabela-ecossistema-modulos")) {
+        const el = obterElementoSecao(null, "módulos", "table", nivel1);
+        if (el) el.id = "tabela-ecossistema-modulos";
+      }
+      if (!document.getElementById("lista-pontos-criticos")) {
+        const el = obterElementoSecao(
+          null,
+          "pontos críticos",
+          "ol, ul",
+          nivel1,
+        );
+        if (el) el.id = "lista-pontos-criticos";
+      }
+      if (!document.getElementById("lista-dados-tecnicos")) {
+        const el = obterElementoSecao(
+          null,
+          "dados técnicos",
+          ".space-y-3, div:has(> div)",
+          nivel1,
+        );
+        if (el) el.id = "lista-dados-tecnicos";
+      }
+      if (!document.getElementById("tabela-hardware-padrao")) {
+        const el =
+          obterElementoSecao(null, "infraestrutura", "table", nivel1) ||
+          obterElementoSecao(null, "hardware", "table", nivel1);
+        if (el) el.id = "tabela-hardware-padrao";
+      }
+      if (!document.getElementById("tabela-regras-negocio")) {
+        const el =
+          obterElementoSecao(null, "regras de negócio", "table", nivel1) ||
+          obterElementoSecao(null, "permissões", "table", nivel1);
+        if (el) el.id = "tabela-regras-negocio";
+      }
+      if (!document.getElementById("fluxo-venda")) {
+        const ta = nivel1.querySelector("textarea");
+        if (ta) ta.id = "fluxo-venda";
+      }
+      if (!document.getElementById("secao-jornada-venda")) {
+        const el =
+          obterElementoSecao(null, "jornada de venda", "section", nivel1) ||
+          nivel1.querySelector("section:has(#fluxo-venda)");
+        if (el) el.id = "secao-jornada-venda";
+      }
+      if (!document.getElementById("lista-parametros-jornada")) {
+        const secaoJornada =
+          document.getElementById("secao-jornada-venda") ||
+          nivel1.querySelector("section:has(#fluxo-venda)");
+        const ul = secaoJornada ? secaoJornada.querySelector("ul") : null;
+        if (ul) ul.id = "lista-parametros-jornada";
+      }
+    }
+
+    if (nivel2) {
+      if (!document.getElementById("tabela-quickview")) {
+        const el =
+          obterElementoSecao(null, "quick-view", "table", nivel2) ||
+          obterElementoSecao(null, "lojas ativas", "table", nivel2);
+        if (el) el.id = "tabela-quickview";
+      }
+    }
+  }
+
+  // Extrai os analistas de implantação formatados como texto legível
+  // a partir dos badges de usuário.
+  function obterAnalistasImplantacao() {
+    const el = document.getElementById("campo-analistas-implantacao");
+    if (!el) return "Não informado";
+    const badges = Array.from(el.querySelectorAll("span"))
+      .map((s) => s.textContent.trim())
+      .filter(Boolean);
+    if (badges.length) return badges.join(", ");
+    const texto = el.textContent.trim().replace(/\s+/g, " ");
+    return texto || "Não informado";
+  }
+
+  // Resolve a cor do macro {status} a partir do texto do badge original.
+  // resolverCorStatus é o mapeamento padrão (usado no Ecossistema de
+  // Módulos e no Status Operacional). resolverCorExcecao é usado apenas
+  // na coluna "Tem Exceção?" da Tabela Quick-View, onde "SIM" deve
+  // continuar amarelo/alerta (como no badge original), não verde.
+  function resolverCorStatus(status) {
+    const cores = {
+      SIM: "Green",
+      NÃO: "Grey",
+      OPERACIONAL: "Green",
+      "EM IMPLANTAÇÃO": "Blue",
+    };
+    return cores[status] || "Grey";
+  }
+
+  function resolverCorExcecao(status) {
+    return status === "SIM" ? "Yellow" : "Grey";
+  }
+
+  // Converte uma tabela HTML (thead/tbody) em uma tabela de wiki markup
+  // (||cabeçalho||...|| / |célula|...|).
+  // - colunasStatus: mapa { indiceDaColuna: resolverDeCor } — cada índice
+  //   (base 0) marcado aqui tem seu texto convertido em {status:colour=...}
+  //   usando o resolvedor de cor informado (padrão: resolverCorStatus).
+  // - colunasIgnorar: índices (base 0) de colunas que não fazem sentido no
+  //   texto exportado (ex.: coluna "Ações" com botões/links) e são omitidas.
+  function tabelaParaWikiMarkup(
+    tabela,
+    { colunasStatus = {}, colunasIgnorar = [] } = {},
+  ) {
+    if (!tabela) return "";
+
+    const linhas = [];
+
+    const cabecalhosTh = Array.from(tabela.querySelectorAll("thead th"));
+    const cabecalhos = cabecalhosTh
+      .map((th, indice) => ({
+        indice,
+        texto: escaparWikiMarkup(th.textContent.trim()),
+      }))
+      .filter(({ indice }) => !colunasIgnorar.includes(indice));
+    if (cabecalhos.length) {
+      linhas.push("||" + cabecalhos.map((c) => c.texto).join("||") + "||");
+    }
+
+    tabela.querySelectorAll("tbody tr").forEach((tr) => {
+      const celulas = Array.from(tr.children)
+        .map((td, indice) => {
+          if (colunasIgnorar.includes(indice)) return null;
+          const texto = td.textContent.trim();
+          if (Object.prototype.hasOwnProperty.call(colunasStatus, indice)) {
+            const status = texto.toUpperCase();
+            const resolverCor = colunasStatus[indice] || resolverCorStatus;
+            return `{status:colour=${resolverCor(status)}|title=${escaparWikiMarkup(status)}}`;
+          }
+          return escaparWikiMarkup(texto);
+        })
+        .filter((celula) => celula !== null);
+      linhas.push("|" + celulas.join("|") + "|");
+    });
+
+    return linhas.join("\n");
+  }
+
+  // Converte uma lista <ol>/<ul> em itens numerados/marcadores de wiki markup.
+  function listaParaWikiMarkup(lista, marcador = "#") {
+    if (!lista) return "";
+    return Array.from(lista.children)
+      .map((li) => `${marcador} ${escaparWikiMarkup(li.textContent.trim())}`)
+      .join("\n");
+  }
+
+  // Converte a lista de "Dados Técnicos e Acessos Globais" (divs em
+  // formato rótulo/valor, não uma <table>) em uma tabela de wiki markup.
+  function listaRotuloValorParaWikiMarkup(container) {
+    if (!container) return "";
+
+    const linhas = ["||Item||Valor||"];
+    Array.from(container.children).forEach((linha) => {
+      const filhos = Array.from(linha.children).filter(
+        (el) => el.tagName !== "I" && el.tagName !== "SVG",
+      );
+      if (filhos.length >= 2) {
+        const rotulo = filhos[0].textContent.trim().replace(/:$/, "");
+        const valor = filhos[1].textContent.trim();
+        if (rotulo || valor) {
+          linhas.push(
+            `|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`,
+          );
+        }
+      } else {
+        const texto = linha.textContent.trim();
+        if (texto.includes(":")) {
+          const [r, ...v] = texto.split(":");
+          linhas.push(
+            `|${escaparWikiMarkup(r.trim())}|${escaparWikiMarkup(v.join(":").trim())}|`,
+          );
+        }
+      }
+    });
+
+    return linhas.length > 1 ? linhas.join("\n") : "";
+  }
+
+  // Converte a seção "Jornada de Venda e Fluxo" em Wiki Markup:
+  // 1. O diagrama ASCII do fluxo (com suas setas e caixas) é inserido
+  //    na macro {code:title=Diagrama do Fluxo de Venda} do Confluence,
+  //    preservando fonte monoespaçada e alinhamento visual exato, sem
+  //    escapar caracteres de controle que poluiriam o diagrama.
+  // 2. Os parâmetros operacionais da jornada (horários, usuários, turnos)
+  //    são extraídos da lista e formatados em uma tabela Confluence limpa.
+  function jornadaVendaParaWikiMarkup() {
+    const nivel1El = document.getElementById("content-nivel1");
+    const ta =
+      document.getElementById("fluxo-venda") ||
+      (nivel1El ? nivel1El.querySelector("textarea") : null);
+    const secao =
+      document.getElementById("secao-jornada-venda") ||
+      (ta ? ta.closest("section") : null) ||
+      obterElementoSecao(null, "jornada de venda", "section", nivel1El);
+
+    const blocos = [];
+
+    // 1. Diagrama em ASCII monoespaçado
+    const fluxoTexto = ta ? (ta.value || ta.textContent || "").trim() : "";
+    if (fluxoTexto) {
+      blocos.push(
+        `{code:title=Diagrama do Fluxo de Venda}\n${fluxoTexto}\n{code}`,
+      );
+    }
+
+    // 2. Parâmetros operacionais
+    const ul =
+      document.getElementById("lista-parametros-jornada") ||
+      (secao ? secao.querySelector("ul") : null);
+    if (ul) {
+      const linhas = ["||Parâmetro Operacional||Configuração Padrão||"];
+      Array.from(ul.querySelectorAll("li")).forEach((li) => {
+        const strong = li.querySelector("strong");
+        let rotulo = "";
+        let valor = "";
+
+        if (strong) {
+          rotulo = strong.textContent.trim().replace(/:$/, "");
+          const clone = li.cloneNode(true);
+          const sNoClone = clone.querySelector("strong");
+          if (sNoClone) sNoClone.remove();
+          clone.querySelectorAll("svg, i").forEach((el) => el.remove());
+          valor = clone.textContent.trim();
+        } else {
+          const texto = li.textContent.trim();
+          if (texto.includes(":")) {
+            const [r, ...v] = texto.split(":");
+            rotulo = r.trim();
+            valor = v.join(":").trim();
+          } else {
+            rotulo = "Item";
+            valor = texto;
+          }
+        }
+
+        if (rotulo || valor) {
+          linhas.push(
+            `|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`,
+          );
+        }
+      });
+
+      if (linhas.length > 1) {
+        blocos.push(linhas.join("\n"));
+      }
+    }
+
+    return blocos.join("\n\n");
+  }
+
+  // Monta o texto completo em Wiki Markup do Nível 1 (Padrão da Marca).
+  function gerarWikiMarkupNivel1() {
+    assegurarIdsEstruturais();
+
+    const nomeMarca = obterNomeMarca("Marca não informada");
+    const numeroFranquia = obterTextoCampo(
+      "campo-numero-franquia",
+      "Não informado",
+    );
+    const servidorMarca = obterTextoCampo(
+      "campo-servidor-marca",
+      "Não informado",
+    );
+    const contatoFranqueadora = obterTextoCampo(
+      "campo-contato-franqueadora",
+      "Não informado",
+    );
+    const analistaProjeto = obterTextoCampo(
+      "campo-analista-projeto",
+      "Não informado",
+    );
+    const analistasImplantacao = obterAnalistasImplantacao();
+    const ecsResponsavel = obterTextoCampo(
+      "campo-ecs-responsavel",
+      "Não informado",
+    );
+    const qtdLojasInicial = obterTextoCampo(
+      "campo-qtd-lojas-inicial",
+      "Não informado",
+    );
+    const descricaoOperacao = obterTextoCampo(
+      "campo-descricao-operacao",
+      "Não informada",
+    );
+
+    const dataGeracao = new Date().toLocaleString("pt-BR");
+
+    const instrucoes = document.querySelector(
+      "#content-nivel1 .bg-blue-50 [contenteditable]",
+    );
+    // Remove o prefixo "Instruções:" do corpo do texto, já que o título
+    // do próprio painel ({panel:title=ℹ️ Instruções}) já o exibe.
+    const textoInstrucoes = instrucoes
+      ? instrucoes.textContent
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/^Instruções:\s*/i, "")
+      : "";
+
+    const tabelaVisaoGeral = [
+      `||Grupo||Item||Valor||`,
+      `|*Informações da Marca*|Marca / Projeto|${escaparWikiMarkup(nomeMarca)}|`,
+      `| |Número da Franquia|${escaparWikiMarkup(numeroFranquia)}|`,
+      `| |Servidor|${escaparWikiMarkup(servidorMarca)}|`,
+      `| |Contato Franqueadora|${escaparWikiMarkup(contatoFranqueadora)}|`,
+      `|*Responsáveis TOTVS*|Analista de Projeto|${escaparWikiMarkup(analistaProjeto)}|`,
+      `| |Analistas de Implantação|${escaparWikiMarkup(analistasImplantacao)}|`,
+      `| |ECS Responsável|${escaparWikiMarkup(ecsResponsavel)}|`,
+      `|*Escopo*|Qtd. Lojas Inicial|${escaparWikiMarkup(qtdLojasInicial)}|`,
+    ].join("\n");
+
+    const painelDescricaoOperacao = [
+      `{panel:title=Descrição da Operação}`,
+      escaparWikiMarkup(descricaoOperacao),
+      `{panel}`,
+    ].join("\n");
+
+    const nivel1El = document.getElementById("content-nivel1");
+    const elModulos = obterElementoSecao(
+      "tabela-ecossistema-modulos",
+      "módulos",
+      "table",
+      nivel1El,
+    );
+    const tabelaModulos = tabelaParaWikiMarkup(elModulos, {
+      colunasStatus: { 1: resolverCorStatus },
+    });
+
+    const elPontosCriticos = obterElementoSecao(
+      "lista-pontos-criticos",
+      "pontos críticos",
+      "ol, ul",
+      nivel1El,
+    );
+    const listaPontosCriticos = listaParaWikiMarkup(elPontosCriticos);
+
+    const blocoJornadaVenda = jornadaVendaParaWikiMarkup();
+    const secaoJornadaMarkup = blocoJornadaVenda
+      ? [`h2. 🔄 Jornada de Venda e Fluxo`, ``, blocoJornadaVenda, ``]
+      : [];
+
+    const elDadosTecnicos = obterElementoSecao(
+      "lista-dados-tecnicos",
+      "dados técnicos",
+      "#lista-dados-tecnicos, .space-y-3, div:has(> div)",
+      nivel1El,
+    );
+    const tabelaDadosTecnicos = listaRotuloValorParaWikiMarkup(elDadosTecnicos);
+
+    const elHardware =
+      obterElementoSecao(
+        "tabela-hardware-padrao",
+        "infraestrutura",
+        "table",
+        nivel1El,
+      ) || obterElementoSecao(null, "hardware", "table", nivel1El);
+    const tabelaHardware = tabelaParaWikiMarkup(elHardware);
+
+    const elRegras =
+      obterElementoSecao(
+        "tabela-regras-negocio",
+        "regras de negócio",
+        "table",
+        nivel1El,
+      ) || obterElementoSecao(null, "permissões", "table", nivel1El);
+    const tabelaRegras = tabelaParaWikiMarkup(elRegras);
+
+    return [
+      `h1. 📌 Mapeamento de Marca — Nível 1: Padrão da Franquia`,
+      ``,
+      `h2. *Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
+      `_Documento gerado em ${dataGeracao}_`,
+      ``,
+      `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
+      textoInstrucoes ||
+        "Este documento define as configurações padrão da rede. Todas as lojas assumem estas configurações, a menos que haja uma exceção registrada no documento de Nível 2.",
+      `{panel}`,
+      ``,
+      `h2. 📋 Visão Geral do Projeto`,
+      ``,
+      tabelaVisaoGeral,
+      ``,
+      painelDescricaoOperacao,
+      ``,
+      `h2. 📦 Ecossistema de Módulos e Sistemas`,
+      ``,
+      tabelaModulos,
+      ``,
+      `h2. ⚠️ Pontos Críticos e Alertas de Suporte`,
+      ``,
+      `{warning:title=ATENÇÃO ANTES DA INSTALAÇÃO}`,
+      listaPontosCriticos,
+      `{warning}`,
+      ``,
+      ...secaoJornadaMarkup,
+      `h2. 🔒 Dados Técnicos e Acessos Globais`,
+      ``,
+      `{note:title=Informações restritas à equipe de Implantação e Suporte}`,
+      tabelaDadosTecnicos,
+      `{note}`,
+      ``,
+      `h2. 🛠️ Infraestrutura e Hardware Padrão`,
+      ``,
+      `{expand:title=Ver especificações completas de hardware}`,
+      tabelaHardware,
+      `{expand}`,
+      ``,
+      `h2. ⚙️ Regras de Negócio e Permissões`,
+      ``,
+      tabelaRegras,
+      ``,
+      `----`,
+      `_Documento gerado automaticamente por TOTVS LINX - Map Generator_`,
+    ].join("\n");
+  }
+
+  // Copia o Wiki Markup do Nível 1 para a Área de Transferência.
+  function copiarWikiMarkupNivel1() {
+    // Mesma cautela das demais exportações: sincronizar textareas sem
+    // disparar o observador de auto-save.
+    executarSemObservarAlteracoes(() => {
+      document.querySelectorAll("textarea").forEach((textarea) => {
+        textarea.textContent = textarea.value;
+      });
+    });
+
+    const wikiMarkup = gerarWikiMarkupNivel1();
+
+    navigator.clipboard
+      .writeText(wikiMarkup)
+      .then(() => {
+        mostrarToast(
+          "Wiki Markup Copiado!",
+          'Cole dentro da macro "Markup" do Confluence (menu +/Inserir → Markup).',
+        );
+      })
+      .catch((err) => {
+        alert("Erro ao copiar Wiki Markup: " + err);
+      });
+  }
+
+  // Converte um card de exceção (criado por criarCardExcecao()) em um
+  // bloco de wiki markup: título com código/nome, painel com status +
+  // metadados, e lista de divergências mapeadas.
+  function cardExcecaoParaWikiMarkup(card) {
+    const codigoEl = card.querySelector(".text-xs.font-bold.text-blue-600");
+    const nomeEl = card.querySelector("h3");
+    const statusEl = card.querySelector(
+      'span[onclick^="alterarStatusOperacional"]',
+    );
+
+    const codigo = codigoEl ? codigoEl.textContent.trim() : "";
+    const nome = nomeEl ? nomeEl.textContent.trim() : "Loja sem nome";
+    const status = statusEl ? statusEl.textContent.trim().toUpperCase() : "";
+
+    // Os 3 metadados (Razão, Data, Analista) ficam em divs dentro do grid
+    // "bg-slate-50": cada um tem um <strong> como rótulo e um <span>/valor
+    // logo em seguida.
+    const metadados = [];
+    card.querySelectorAll(".bg-slate-50 > div").forEach((bloco) => {
+      const rotuloEl = bloco.querySelector("strong");
+      const valorEl = bloco.querySelector("span");
+      if (!rotuloEl) return;
+      const rotulo = rotuloEl.textContent.trim().replace(/:$/, "");
+      const valor = valorEl ? valorEl.textContent.trim() : "";
+      metadados.push(
+        `|${escaparWikiMarkup(rotulo)}|${escaparWikiMarkup(valor)}|`,
+      );
+    });
+
+    const itensDivergencia = Array.from(card.querySelectorAll("li")).map(
+      (li) => `* ${escaparWikiMarkup(li.textContent.trim())}`,
+    );
+
+    return [
+      `h3. ${escaparWikiMarkup(codigo)} — ${escaparWikiMarkup(nome)}`,
+      ``,
+      `{panel:title=Status: ${escaparWikiMarkup(status)}}`,
+      `||Campo||Valor||`,
+      ...metadados,
+      `{panel}`,
+      ``,
+      `*Divergências Mapeadas:*`,
+      ...(itensDivergencia.length
+        ? itensDivergencia
+        : ["* Nenhuma divergência detalhada."]),
+    ].join("\n");
+  }
+
+  // Monta o texto completo em Wiki Markup do Nível 2 (Exceções e Rollout).
+  function gerarWikiMarkupNivel2() {
+    assegurarIdsEstruturais();
+
+    const nomeMarca = obterNomeMarca("Marca não informada");
+    const dataGeracao = new Date().toLocaleString("pt-BR");
+
+    const instrucoes = document.querySelector(
+      "#content-nivel2 .bg-blue-50 [contenteditable]",
+    );
+    const textoInstrucoes = instrucoes
+      ? instrucoes.textContent
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/^Instruções:\s*/i, "")
+      : "";
+
+    const totalLojas =
+      document.getElementById("card-total")?.textContent.trim() || "0";
+    const lojasPadrao =
+      document.getElementById("card-padrao")?.textContent.trim() || "0";
+    const comExcecoes =
+      document.getElementById("card-excecoes")?.textContent.trim() || "0";
+    const emImplantacao =
+      document.getElementById("card-implantacao")?.textContent.trim() || "0";
+
+    const tabelaResumo = [
+      `||Total de Lojas||Lojas no Padrão||Com Exceções||Em Implantação||`,
+      `|*${totalLojas}*|{status:colour=Green|title=${lojasPadrao}}|{status:colour=Yellow|title=${comExcecoes}}|{status:colour=Blue|title=${emImplantacao}}|`,
+    ].join("\n");
+
+    const nivel2El = document.getElementById("content-nivel2");
+    const elQuickView =
+      obterElementoSecao("tabela-quickview", "quick-view", "table", nivel2El) ||
+      obterElementoSecao(null, "lojas ativas", "table", nivel2El);
+
+    const tabelaQuickView = tabelaParaWikiMarkup(elQuickView, {
+      colunasStatus: { 3: resolverCorStatus, 4: resolverCorExcecao },
+      colunasIgnorar: [5],
+    });
+
+    const containerExcecoes =
+      document.getElementById("container-excecoes") ||
+      (nivel2El
+        ? nivel2El.querySelector(
+            "#container-excecoes, div:has(> div[id^='loja-'])",
+          )
+        : null);
+    const cards = Array.from(
+      containerExcecoes
+        ? containerExcecoes.children
+        : document.querySelectorAll("#content-nivel2 div[id^='loja-']"),
+    );
+    const excecoesWikiMarkup = cards.length
+      ? cards.map(cardExcecaoParaWikiMarkup).join("\n\n")
+      : "_Nenhuma exceção registrada até o momento._";
+
+    return [
+      `h1. 📌 Mapeamento de Marca — Nível 2: Exceções e Rollout`,
+      ``,
+      `*Marca / Projeto:* ${escaparWikiMarkup(nomeMarca)}`,
+      `_Documento gerado em ${dataGeracao}_`,
+      ``,
+      `{panel:bgColor=#eff6ff|borderColor=#bfdbfe|titleBGColor=#dbeafe|title=ℹ️ Instruções}`,
+      textoInstrucoes ||
+        "Utilize este documento para registrar apenas as lojas com divergências em relação ao Padrão da Marca (Nível 1).",
+      `{panel}`,
+      ``,
+      `h2. 📊 Resumo de Rollout`,
+      ``,
+      tabelaResumo,
+      ``,
+      `h2. 📌 Tabela Quick-View de Lojas Ativas`,
+      ``,
+      tabelaQuickView,
+      ``,
+      `h2. 🎯 Registro Detalhado de Exceções`,
+      ``,
+      excecoesWikiMarkup,
+      ``,
+      `----`,
+      `_Documento gerado automaticamente por TOTVS LINX - Map Generator_`,
+    ].join("\n");
+  }
+
+  // Copia o Wiki Markup do Nível 2 para a Área de Transferência.
+  function copiarWikiMarkupNivel2() {
+    executarSemObservarAlteracoes(() => {
+      document.querySelectorAll("textarea").forEach((textarea) => {
+        textarea.textContent = textarea.value;
+      });
+    });
+
+    const wikiMarkup = gerarWikiMarkupNivel2();
+
+    navigator.clipboard
+      .writeText(wikiMarkup)
+      .then(() => {
+        mostrarToast(
+          "Wiki Markup Copiado!",
+          'Cole dentro da macro "Markup" do Confluence (menu +/Inserir → Markup).',
+        );
+      })
+      .catch((err) => {
+        alert("Erro ao copiar Wiki Markup: " + err);
+      });
+  }
+
+  function mostrarToast(
+    titulo = "HTML Copiado com Sucesso!",
+    subtitulo = "Cole o código diretamente dentro do Jira.",
+  ) {
+    const toast = document.getElementById("toast");
+    const tituloEl = document.getElementById("toast-titulo");
+    const subtituloEl = document.getElementById("toast-subtitulo");
+    if (tituloEl) tituloEl.textContent = titulo;
+    if (subtituloEl) subtituloEl.textContent = subtitulo;
+    toast.classList.remove("hidden");
+    setTimeout(() => {
+      toast.classList.add("hidden");
+    }, 3000);
+  }
+
+  // Recalcula todos os cards de resumo dinamicamente
+  function recalcularContadores() {
+    const containerExcecoes = document.getElementById("container-excecoes");
+    const qtdExcecoes = containerExcecoes
+      ? containerExcecoes.children.length
+      : 0;
+
+    const elTotal = document.getElementById("card-total");
+    const totalLojas = elTotal ? parseInt(elTotal.innerText.trim()) || 0 : 0;
+
+    const elExcecoes = document.getElementById("card-excecoes");
+    if (elExcecoes) elExcecoes.innerText = qtdExcecoes;
+
+    const elPadrao = document.getElementById("card-padrao");
+    if (elPadrao) {
+      const lojasPadrao = Math.max(0, totalLojas - qtdExcecoes);
+      elPadrao.innerText = lojasPadrao;
+    }
+  }
+
+  // Calcula o próximo código de loja disponível a partir do MAIOR código já
+  // usado na tabela (não da contagem de linhas), evitando reaproveitar um
+  // código/ID já removido. Também garante que o ID resultante ainda não
+  // exista no documento, incrementando até encontrar um livre.
+  function obterProximoCodigoLoja() {
+    const tbody = document.querySelector("#tabela-quickview tbody");
+    let maiorNumero = 0;
+
+    if (tbody) {
+      tbody.querySelectorAll("tr").forEach((tr) => {
+        const codigoTexto = tr.cells[0] ? tr.cells[0].textContent.trim() : "";
+        const match = codigoTexto.match(/(\d+)/);
+        if (match) {
+          maiorNumero = Math.max(maiorNumero, parseInt(match[1], 10));
+        }
+      });
+    }
+
+    let numero = maiorNumero + 1;
+    let codigo = `L${String(numero).padStart(3, "0")}`;
+    let elementId = `loja-${codigo.toLowerCase()}`;
+
+    while (
+      document.getElementById(elementId) ||
+      document.getElementById(`linha-${elementId}`)
+    ) {
+      numero++;
+      codigo = `L${String(numero).padStart(3, "0")}`;
+      elementId = `loja-${codigo.toLowerCase()}`;
+    }
+
+    return { codigo, elementId };
+  }
+
+  // Cria a linha na Tabela Quick-View e, opcionalmente, o card de exceção
+  // detalhado correspondente. Função única usada tanto por
+  // "Adicionar Loja" quanto por "Adicionar Nova Exceção", evitando a
+  // duplicação de HTML que existia entre as duas antes.
+  function criarLojaCompleta(codigo, elementId, nomeLoja, comExcecao) {
+    const tbody = document.querySelector("#tabela-quickview tbody");
+    const linhaId = `linha-${elementId}`;
+
+    const statusExcecaoTexto = comExcecao ? "SIM" : "NÃO";
+    const statusExcecaoClasse = comExcecao
+      ? "bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer select-none"
+      : "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-slate-50/50";
+    tr.id = linhaId;
+    tr.innerHTML = `
+          <td contenteditable="true" class="px-6 py-3.5 font-bold text-slate-800">${codigo}</td>
+          <td contenteditable="true" class="px-6 py-3.5 font-medium text-slate-900">${nomeLoja}</td>
+          <td contenteditable="true" class="px-6 py-3.5 text-center text-slate-600">UF</td>
+          <td class="px-6 py-3.5 text-center">
+            <span onclick="alterarStatusOperacional(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none">OPERACIONAL</span>
+          </td>
+          <td class="px-6 py-3.5 text-center">
+            <span onclick="alterarStatusExcecao(this, '${elementId}')" class="${statusExcecaoClasse}">${statusExcecaoTexto}</span>
+          </td>
+          <td class="px-6 py-3.5 text-right flex items-center justify-end gap-2">
+            <a href="#${elementId}" class="text-blue-600 hover:text-blue-800 font-medium text-xs underline inline-flex items-center gap-1">
+              Ver Exceção <i data-lucide="arrow-down" class="w-3 h-3"></i>
+            </a>
+            <button onclick="removerLinhaTabela('${linhaId}', '${elementId}')" class="text-slate-400 hover:text-red-600 transition-colors p-1" title="Excluir Loja">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </td>
+        `;
+    tbody.appendChild(tr);
+    lucide.createIcons();
+
+    if (comExcecao) {
+      criarCardExcecao(elementId, codigo, nomeLoja);
+    } else {
+      recalcularContadores();
+    }
+  }
+
+  // Adiciona uma nova loja já com o registro de exceção detalhado aberto
+  function adicionarNovaExcecao() {
+    const { codigo, elementId } = obterProximoCodigoLoja();
+    criarLojaCompleta(codigo, elementId, "Nova Loja Exemplo", true);
+  }
+
+  // Alterna status de Operacional / Em Implantação
+  function alterarStatusOperacional(el) {
+    const status = el.textContent.trim().toUpperCase();
+    if (status === "OPERACIONAL") {
+      el.textContent = "EM IMPLANTAÇÃO";
+      el.className =
+        "bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none";
+    } else {
+      el.textContent = "OPERACIONAL";
+      el.className =
+        "bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full cursor-pointer select-none";
+    }
+  }
+
+  // Alterna o status "Tem Exceção?" entre SIM e NÃO na tabela
+  function alterarStatusExcecao(el, targetCardId) {
+    const status = el.textContent.trim().toUpperCase();
+    if (status === "SIM") {
+      // Pergunta ANTES de alterar a UI: se o usuário cancelar, nada muda
+      // (evita badge "NÃO" com o card de exceção ainda existente).
+      if (!confirm("Deseja remover o registro detalhado dessa exceção?")) {
+        return;
+      }
+
+      el.textContent = "NÃO";
+      el.className =
+        "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+
+      const card = document.getElementById(targetCardId);
+      if (card) {
+        card.remove();
+        recalcularContadores();
+      }
+    } else {
+      el.textContent = "SIM";
+      el.className =
+        "bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer select-none";
+
+      if (!document.getElementById(targetCardId)) {
+        const codigo = targetCardId.replace("loja-", "").toUpperCase();
+        criarCardExcecao(targetCardId, codigo, "Nova Loja Exceção");
+      }
+    }
+  }
+
+  // Adiciona uma nova linha na Tabela Quick-View (loja padrão, sem exceção)
+  function adicionarLinhaTabela() {
+    const { codigo, elementId } = obterProximoCodigoLoja();
+    criarLojaCompleta(codigo, elementId, "Nova Loja Exemplo", false);
+  }
+
+  // Cria o Card Detalhado de Exceção
+  function criarCardExcecao(cardId, codigoLoja, nomeLoja) {
+    const container = document.getElementById("container-excecoes");
+    if (!container) return;
+
+    const card = document.createElement("div");
+    card.id = cardId;
+    card.className =
+      "bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4 target:ring-2 target:ring-blue-500 scroll-mt-20";
+    card.innerHTML = `
+          <div class="flex justify-between items-start border-b border-slate-100 pb-4">
+            <div>
+              <span contenteditable="true" class="text-xs font-bold text-blue-600 uppercase tracking-wider block">Código ${codigoLoja}</span>
+              <h3 contenteditable="true" class="text-lg font-bold text-slate-900">${nomeLoja}</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <span onclick="alterarStatusOperacional(this)" class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full cursor-pointer select-none">OPERACIONAL</span>
+              <button onclick="removerExcecao('${cardId}')" class="text-slate-400 hover:text-red-600 transition-colors p-1" title="Excluir Exceção">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm bg-slate-50 p-4 rounded-lg">
+            <div>
+              <strong class="text-slate-500 block text-xs">Razão da Exceção:</strong>
+              <span contenteditable="true" class="text-slate-800 block">Descreva a razão da exceção aqui...</span>
+            </div>
+            <div>
+              <strong class="text-slate-500 block text-xs">Data da Implantação:</strong>
+              <span contenteditable="true" class="text-slate-800 block">DD/MM/AAAA</span>
+            </div>
+            <div>
+              <strong class="text-slate-500 block text-xs">Analista Implantador:</strong>
+              <span contenteditable="true" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-800 mt-1">@Analista</span>
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-semibold text-slate-900 mb-3">Divergências Mapeadas:</h4>
+            <ul class="space-y-2 text-sm text-slate-700">
+              <li class="flex items-start gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 mt-1.5 shrink-0"></span>
+                <div contenteditable="true"><strong>Item Divergente:</strong> Detalhes da divergência.</div>
+              </li>
+            </ul>
+          </div>
+        `;
+    container.appendChild(card);
+    lucide.createIcons();
+    recalcularContadores();
+  }
+
+  // Remove um card de exceção e ajusta a linha correspondente na tabela
+  function removerExcecao(cardId) {
+    if (confirm("Deseja realmente remover este registro de exceção?")) {
+      const card = document.getElementById(cardId);
+      if (card) card.remove();
+
+      const linha = document.getElementById(`linha-${cardId}`);
+      if (linha) {
+        const spanExcecao = linha.cells[4].querySelector("span");
+        if (spanExcecao) {
+          spanExcecao.textContent = "NÃO";
+          spanExcecao.className =
+            "bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded cursor-pointer select-none";
+        }
+      }
+
+      recalcularContadores();
+    }
+  }
+
+  // Remove uma linha da tabela e também limpa o card de exceção se existir
+  function removerLinhaTabela(linhaId, cardId) {
+    if (confirm("Deseja realmente excluir esta loja da tabela?")) {
+      const linha = document.getElementById(linhaId);
+      if (linha) linha.remove();
+
+      const card = document.getElementById(cardId);
+      if (card) card.remove();
+
+      recalcularContadores();
+    }
+  }
+
+  // Sanitiza um trecho de HTML antes de reinseri-lo via innerHTML,
+  // removendo <script>/<style>/<iframe> e qualquer atributo de evento
+  // ("on*") que NÃO seja uma chamada às funções internas que o próprio
+  // app usa para os botões/badges de status (ex.: onclick="alterarStatus(this)").
+  // Usado tanto ao restaurar o rascunho salvo na nuvem quanto ao importar
+  // um arquivo .json de projeto — ambos podem trazer HTML de origem não
+  // totalmente confiável (rascunho salvo com HTML colado num campo
+  // contenteditable, arquivo compartilhado por outro analista etc.),
+  // reduzindo o risco de um handler injetado (ex.: <img onerror="...">)
+  // ser reexecutado ao ser recarregado (self-XSS), sem quebrar os
+  // onclick legítimos gerados pelo próprio app.
+  const CHAMADA_PERMITIDA =
+    /^(alterarStatus|adicionarLinhaTabela|alterarStatusOperacional|alterarStatusExcecao|removerLinhaTabela|adicionarNovaExcecao|removerExcecao|recalcularContadores)\(/;
+
+  function sanitizarHTMLDocumento(html) {
+    const doc = new DOMParser().parseFromString(html || "", "text/html");
+
+    doc
+      .querySelectorAll("script, style, iframe, object, embed")
+      .forEach((el) => el.remove());
+
+    doc.querySelectorAll("*").forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const nome = attr.name.toLowerCase();
+        const valor = attr.value.trim();
+
+        if (nome.startsWith("on") && CHAMADA_PERMITIDA.test(valor)) {
+          return; // handler interno conhecido do app, mantém
+        }
+        if (
+          nome.startsWith("on") ||
+          valor.toLowerCase().startsWith("javascript:")
+        ) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    return doc.body.innerHTML;
+  }
+
+  // Restaura o conteúdo do documento com segurança por aba.
+  // Se um rascunho salvo contiver apenas uma das abas (ex.: rascunho
+  // legado que só continha o Nível 2), a outra aba é PRESERVADA e NÃO
+  // destruída pelo carregamento. Após aplicar o HTML, reinjeta quaisquer
+  // IDs estruturais essenciais que faltem.
+  function restaurarConteudoDocumento(htmlRestaurado) {
+    const container = document.getElementById("documento-container");
+    if (!container || !htmlRestaurado) return;
+
+    const htmlSanitizado = sanitizarHTMLDocumento(htmlRestaurado);
+    const tempDoc = new DOMParser().parseFromString(
+      htmlSanitizado,
+      "text/html",
+    );
+
+    const nivel1Novo = tempDoc.getElementById("content-nivel1");
+    const nivel2Novo = tempDoc.getElementById("content-nivel2");
+
+    const nivel1Atual = document.getElementById("content-nivel1");
+    const nivel2Atual = document.getElementById("content-nivel2");
+
+    if (nivel1Novo && nivel2Novo && nivel1Atual && nivel2Atual) {
+      nivel1Atual.innerHTML = nivel1Novo.innerHTML;
+      nivel2Atual.innerHTML = nivel2Novo.innerHTML;
+    } else if (nivel1Novo && !nivel2Novo && nivel1Atual) {
+      nivel1Atual.innerHTML = nivel1Novo.innerHTML;
+    } else if (!nivel1Novo && nivel2Novo && nivel2Atual) {
+      // Traz apenas o Nível 2: atualiza o Nível 2 e PRESERVA o Nível 1
+      nivel2Atual.innerHTML = nivel2Novo.innerHTML;
+    } else {
+      // Fallback para caso o HTML salvo seja a raiz direta
+      container.innerHTML = htmlSanitizado;
+    }
+
+    assegurarIdsEstruturais();
+  }
+
+  // Persistência de dados no Google Apps Script
+  function obterEstadoGeralJSON() {
+    // Sincroniza textarea.value -> textContent SEM disparar o observador
+    // de alterações: caso contrário, o próprio ato de salvar geraria uma
+    // mutação no DOM que marcaria o documento como alterado de novo,
+    // reagendando outro auto-save 3s depois, num loop infinito.
+    executarSemObservarAlteracoes(() => {
+      document.querySelectorAll("textarea").forEach((ta) => {
+        ta.textContent = ta.value;
+      });
+    });
+
+    const container = document.getElementById("documento-container");
+    return JSON.stringify({
+      conteudoHTML: container.innerHTML,
+      timestamp: new Date().toLocaleString(),
+    });
+  }
+
+  // --- Auto-save por debounce --------------------------------------------
+  // Em vez de salvar incondicionalmente a cada N segundos, o save só é
+  // agendado quando o documento realmente muda (edição de texto, criação
+  // ou remoção de linhas/cards, alteração de status). Isso reduz as
+  // chamadas ao Apps Script e evita sobrescrever o rascunho quando nada
+  // foi alterado.
+  let estadoAlterado = false;
+  let idTimeoutAutoSave = null;
+  let observadorAlteracoes = null;
+  const AUTO_SAVE_DEBOUNCE_MS = 3000; // salva ~3s após a última alteração
+  const AUTO_SAVE_SEGURANCA_MS = 2 * 60 * 1000; // rede de segurança: a cada 2 min, se houver algo pendente
+
+  function marcarComoAlterado() {
+    estadoAlterado = true;
+    exibirIndicadorNaoSalvo();
+    if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
+    idTimeoutAutoSave = setTimeout(autoSalvarNoGoogle, AUTO_SAVE_DEBOUNCE_MS);
+  }
+
+  // Executa `fn` com o observador de alterações temporariamente
+  // desligado. Usado para mudanças no DOM feitas pela própria aplicação
+  // (ex.: sincronizar textareas antes de salvar/exportar) que não devem
+  // ser tratadas como uma edição do usuário.
+  function executarSemObservarAlteracoes(fn) {
+    if (observadorAlteracoes) observadorAlteracoes.disconnect();
+    try {
+      fn();
+    } finally {
+      if (observadorAlteracoes) {
+        const container = document.getElementById("documento-container");
+        if (container) {
+          observadorAlteracoes.observe(container, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+          });
+        }
+      }
+    }
+  }
+
+  // Observa qualquer mutação no documento (texto, atributos, filhos
+  // adicionados/removidos) para disparar o auto-save por debounce.
+  function iniciarObservadorDeAlteracoes() {
+    const container = document.getElementById("documento-container");
+    if (!container) return;
+
+    observadorAlteracoes = new MutationObserver(() => marcarComoAlterado());
+    observadorAlteracoes.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+  }
+
+  // --- Projetos: estado da sessão e navegação entre áreas ---------------
+  // PROJETO_ATUAL guarda os metadados do projeto aberto (id, nome, dono,
+  // colaboradores e o papel do usuário atual nele: "dono" | "edicao" |
+  // "visualizacao"). Enquanto nenhum projeto está aberto, PROJETO_ATUAL é
+  // null e as chamadas de auto-save/observador ficam inativas.
+  let PROJETO_ATUAL = null;
+  let PROJETO_COMPARTILHAR_ID = null;
+
+  function mostrarArea(nomeArea) {
+    ["area-home", "area-projetos", "area-projeto-atual"].forEach((id) => {
+      document.getElementById(id).classList.toggle("hidden", id !== nomeArea);
+    });
+    document
+      .querySelectorAll(".area-button")
+      .forEach((btn) => btn.classList.remove("tab-active"));
+    if (nomeArea === "area-home")
+      document.getElementById("nav-home").classList.add("tab-active");
+    if (nomeArea === "area-projetos")
+      document.getElementById("nav-projetos").classList.add("tab-active");
+
+    document
+      .getElementById("sidebar-secoes-projeto")
+      .classList.toggle("hidden", nomeArea !== "area-projeto-atual");
+    document
+      .getElementById("sidebar-rodape-projeto")
+      .classList.toggle("hidden", nomeArea !== "area-projeto-atual");
+    fecharSidebarMobile();
+  }
+
+  function mostrarAreaHome() {
+    mostrarArea("area-home");
+    carregarListaProjetos();
+  }
+
+  function mostrarAreaProjetos() {
+    mostrarArea("area-projetos");
+    carregarListaProjetos();
+  }
+
+  function formatarDataHora(isoString) {
+    if (!isoString) return "—";
+    try {
+      return new Date(isoString).toLocaleString("pt-BR");
+    } catch (e) {
+      return isoString;
+    }
+  }
+
+  function rotuloPapel(papel) {
+    if (papel === "dono")
+      return { texto: "Dono", classe: "bg-blue-100 text-blue-800" };
+    if (papel === "edicao")
+      return {
+        texto: "Pode editar",
+        classe: "bg-emerald-100 text-emerald-800",
+      };
+    return { texto: "Somente leitura", classe: "bg-amber-100 text-amber-800" };
+  }
+
+  function linhaProjetoHTML(projeto) {
+    const papel = rotuloPapel(projeto.meuPapel);
+    const acoesDono =
+      projeto.meuPapel === "dono"
+        ? `<button onclick="abrirModalCompartilhar('${projeto.id}')" class="text-xs font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1">
+                 <i data-lucide="users" class="w-3.5 h-3.5"></i> Compartilhar
+               </button>
+               <button onclick="excluirProjetoUI('${projeto.id}', '${(projeto.nome || "").replace(/'/g, "\\'")}')" class="text-xs font-medium text-red-500 hover:text-red-700 flex items-center gap-1">
+                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Excluir
+               </button>`
+        : "";
+
+    return `
+          <div class="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-slate-900 truncate">${projeto.nome}</p>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${papel.classe}">${papel.texto}</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                Dono: ${projeto.dono} · Atualizado em ${formatarDataHora(projeto.atualizadoEm)}${projeto.atualizadoPor ? " por " + projeto.atualizadoPor : ""}
+              </p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              ${acoesDono}
+              <button onclick="abrirProjetoNaTela('${projeto.id}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">Abrir</button>
+            </div>
+          </div>`;
+  }
+
+  function carregarListaProjetos() {
+    if (typeof google === "undefined" || !google.script) return;
+
+    google.script.run
+      .withSuccessHandler((projetos) => {
+        if (isAuthErrorLike(projetos)) {
+          showAuthOverlay();
+          return;
+        }
+        const listaCompleta = document.getElementById("lista-projetos");
+        const listaRecentes = document.getElementById(
+          "lista-projetos-recentes",
+        );
+
+        if (!projetos || projetos.length === 0) {
+          const vazio =
+            '<div class="px-6 py-8 text-sm text-slate-400 text-center">Nenhum projeto ainda. Crie o primeiro com o botão acima.</div>';
+          if (listaCompleta) listaCompleta.innerHTML = vazio;
+          if (listaRecentes) listaRecentes.innerHTML = vazio;
+          return;
+        }
+
+        if (listaCompleta)
+          listaCompleta.innerHTML = projetos.map(linhaProjetoHTML).join("");
+        if (listaRecentes)
+          listaRecentes.innerHTML = projetos
+            .slice(0, 5)
+            .map(linhaProjetoHTML)
+            .join("");
+
+        if (window.lucide) lucide.createIcons();
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao listar projetos:", erro);
+        logarErroFrontend("Falha ao listar projetos", {
+          erro_mensagem: erro.message,
+          erro_completo: String(erro),
+        });
+
+        var mensagemErro = "Não foi possível carregar a lista de projetos.";
+        if (
+          erro.message &&
+          erro.message.indexOf("SpreadsheetApp.openById") > -1
+        ) {
+          mensagemErro =
+            "⚠️ Erro de Permissão: Você precisa autorizar este script.\n\nSolução:\n1. Faça logout\n2. Faça login novamente\n3. Clique em 'Autorizar' quando Google pedir\n4. Recarregue a página\n\nErro técnico: " +
+            erro.message;
+        } else {
+          mensagemErro += "\n\nErro: " + erro.message;
+        }
+
+        exibirErroSalvamento(mensagemErro);
+      })
+      .listarProjetosComMigracao();
+  }
+
+  function criarNovoProjeto() {
+    const nome = prompt("Nome do novo projeto (ex.: nome da marca/cliente):");
+    if (nome === null) return; // cancelado
+    if (typeof google === "undefined" || !google.script) return;
+
+    google.script.run
+      .withSuccessHandler((projeto) => {
+        aplicarProjetoNaTela(projeto, null);
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao criar projeto:", erro);
+
+        var mensagemErro = "Falha ao criar o projeto.";
+        if (erro.message && erro.message.indexOf("SpreadsheetApp") > -1) {
+          mensagemErro =
+            "⚠️ Erro de Permissão: Script sem autorização\n\nSolução:\n1. Faça logout\n2. Login novamente\n3. Autorize quando Google pedir\n4. Recarregue a página\n\nErro técnico: " +
+            erro.message;
+        } else {
+          mensagemErro += "\n\nErro: " + erro.message;
+        }
+
+        exibirErroSalvamento(mensagemErro);
+      })
+      .criarProjeto(nome);
+  }
+
+  function excluirProjetoUI(id, nome) {
+    if (
+      !confirm(
+        `Excluir definitivamente o projeto "${nome}"? Esta ação não pode ser desfeita.`,
+      )
+    )
+      return;
+
+    google.script.run
+      .withSuccessHandler(() => {
+        if (PROJETO_ATUAL && PROJETO_ATUAL.id === id) {
+          PROJETO_ATUAL = null;
+          mostrarAreaProjetos();
+        } else {
+          carregarListaProjetos();
+        }
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao excluir projeto:", erro);
+        logarErroFrontend("Falha ao excluir projeto", {
+          projeto_id: id,
+          projeto_nome: nome,
+          erro_mensagem: erro.message,
+        });
+        exibirErroSalvamento("Falha ao excluir o projeto: " + erro.message);
+      })
+      .excluirProjeto(id);
+  }
+
+  // Abre um projeto: busca metadados + conteúdo no backend e então
+  // aplica o resultado na tela.
+  function abrirProjetoNaTela(id) {
+    if (typeof google === "undefined" || !google.script) return;
+
+    exibirCarregando();
+    iniciarProgressBar();
+
+    google.script.run
+      .withSuccessHandler((resultado) => {
+        if (isAuthErrorLike(resultado)) {
+          showAuthOverlay();
+          return;
+        }
+        if (resultado && resultado.ok === true && resultado.data) {
+          resultado = resultado.data;
+        }
+        aplicarProjetoNaTela(resultado.projeto, resultado.conteudoJson);
+        completarProgressBar();
+      })
+      .withFailureHandler((erro) => {
+        ocultarCarregando();
+        completarProgressBar();
+        console.error("Erro ao abrir projeto:", erro);
+        logarErroFrontend("Falha ao abrir projeto", {
+          projeto_id: id,
+          erro_mensagem: erro.message,
+          erro_completo: String(erro),
+        });
+        exibirErroSalvamento(
+          "Não foi possível abrir este projeto: " + erro.message,
+        );
+      })
+      .abrirProjeto(id);
+  }
+
+  function aplicarProjetoNaTela(projeto, conteudoJson) {
+    PROJETO_ATUAL = projeto;
+
+    // Projeto recém-criado (sem save ainda): mantém o modelo padrão já
+    // presente no HTML, sem tentar restaurar nada.
+    if (conteudoJson) {
+      try {
+        const dados = JSON.parse(conteudoJson);
+        if (dados.conteudoHTML) {
+          restaurarConteudoDocumento(dados.conteudoHTML);
+          document
+            .querySelectorAll("textarea")
+            .forEach((ta) => (ta.value = ta.textContent));
+        }
+      } catch (e) {
+        console.error("Erro ao restaurar conteúdo do projeto:", e);
+      }
+    }
+
+    assegurarIdsEstruturais();
+    if (window.lucide) lucide.createIcons();
+    recalcularContadores();
+
+    atualizarCabecalhoProjeto();
+    aplicarModoSomenteLeitura(projeto.meuPapel === "visualizacao");
+    inicializarTopbar();
+
+    mostrarArea("area-projeto-atual");
+    switchTab("nivel1");
+
+    ocultarCarregando();
+    estadoAlterado = false;
+    atualizarStatusTopbar("salvo");
+    iniciarObservadorDeAlteracoes();
+  }
+
+  function atualizarCabecalhoProjeto() {
+    if (!PROJETO_ATUAL) return;
+    const papel = rotuloPapel(PROJETO_ATUAL.meuPapel);
+
+    // Elementos antigos removidos (agora na top bar)
+    // document.getElementById("cabecalho-nome-projeto").textContent = PROJETO_ATUAL.nome;
+    // document.getElementById("cabecalho-info-atualizacao").textContent = ...
+
+    // Atualiza sidebar
+    const sidebarNome = document.getElementById("sidebar-nome-projeto-atual");
+    if (sidebarNome) sidebarNome.textContent = PROJETO_ATUAL.nome;
+
+    const sidebarPapel = document.getElementById("sidebar-papel-projeto-atual");
+    if (sidebarPapel) sidebarPapel.textContent = papel.texto;
+
+    // Badges
+    const badgeLeituraOld = document.getElementById("badge-modo-leitura");
+    if (badgeLeituraOld)
+      badgeLeituraOld.classList.toggle(
+        "hidden",
+        PROJETO_ATUAL.meuPapel !== "visualizacao",
+      );
+
+    const badgeLeituraTopbar = document.getElementById(
+      "badge-modo-leitura-topbar",
+    );
+    if (badgeLeituraTopbar)
+      badgeLeituraTopbar.classList.toggle(
+        "hidden",
+        PROJETO_ATUAL.meuPapel !== "visualizacao",
+      );
+
+    const btnCompartilhar = document.getElementById("btn-compartilhar-sidebar");
+    if (btnCompartilhar)
+      btnCompartilhar.classList.toggle(
+        "hidden",
+        PROJETO_ATUAL.meuPapel !== "dono",
+      );
+
+    // Atualiza top bar
+    atualizarTopbarNome();
+  }
+
+  // Bloqueia edição e exportações para colaboradores com papel
+  // "visualizacao": desliga contenteditable, desabilita textareas e
+  // oculta tudo marcado com data-requer-edicao (import/export JSON,
+  // exportações Wiki Markup, reset do projeto).
+  function aplicarModoSomenteLeitura(somenteLeitura) {
+    document
+      .querySelectorAll("#documento-container [contenteditable='true']")
+      .forEach((el) => {
+        el.setAttribute("contenteditable", somenteLeitura ? "false" : "true");
+      });
+    document.querySelectorAll("#documento-container textarea").forEach((ta) => {
+      ta.readOnly = somenteLeitura;
+    });
+    document.querySelectorAll("[data-requer-edicao='true']").forEach((el) => {
+      el.classList.toggle("hidden", somenteLeitura);
+    });
+  }
+
+  function voltarParaProjetos() {
+    // Garante que nenhuma edição pendente seja perdida antes de sair.
+    if (estadoAlterado) autoSalvarNoGoogle();
+    if (observadorAlteracoes) observadorAlteracoes.disconnect();
+    PROJETO_ATUAL = null;
+    mostrarAreaProjetos();
+  }
+
+  // --- Compartilhamento --------------------------------------------------
+  function abrirModalCompartilhar(idOpcional) {
+    // Se chamado a partir da sidebar (sem argumento), usa o projeto aberto.
+    const id = idOpcional || (PROJETO_ATUAL && PROJETO_ATUAL.id);
+    if (!id) return;
+
+    PROJETO_COMPARTILHAR_ID = id;
+    document.getElementById("modal-compartilhar-email").value = "";
+
+    // Se for o projeto atualmente aberto, já temos os colaboradores em
+    // memória; senão, busca do backend antes de abrir o modal.
+    if (PROJETO_ATUAL && PROJETO_ATUAL.id === id) {
+      renderizarModalCompartilhar(
+        PROJETO_ATUAL.nome,
+        PROJETO_ATUAL.colaboradores || [],
+      );
+      document.getElementById("modal-compartilhar").classList.remove("hidden");
+    } else {
+      google.script.run
+        .withSuccessHandler((resultado) => {
+          renderizarModalCompartilhar(
+            resultado.projeto.nome,
+            resultado.projeto.colaboradores || [],
+          );
+          document
+            .getElementById("modal-compartilhar")
+            .classList.remove("hidden");
+        })
+        .withFailureHandler((erro) =>
+          exibirErroSalvamento(
+            "Não foi possível abrir o compartilhamento: " + erro.message,
+          ),
+        )
+        .abrirProjeto(id);
+    }
+  }
+
+  function renderizarModalCompartilhar(nomeProjeto, colaboradores) {
+    document.getElementById("modal-compartilhar-nome-projeto").textContent =
+      `Projeto: ${nomeProjeto}`;
+    const lista = document.getElementById("modal-compartilhar-lista-atual");
+
+    if (!colaboradores || colaboradores.length === 0) {
+      lista.innerHTML =
+        '<p class="text-xs text-slate-400">Ainda não compartilhado com ninguém.</p>';
+    } else {
+      lista.innerHTML = colaboradores
+        .map((c) => {
+          const papel = rotuloPapel(c.papel);
+          return `<div class="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2">
+                        <span class="truncate">${c.email}</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${papel.classe}">${papel.texto}</span>
+                          <button onclick="removerColaboradorUI('${c.email}')" class="text-red-500 hover:text-red-700"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                      </div>`;
+        })
+        .join("");
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function fecharModalCompartilhar() {
+    document.getElementById("modal-compartilhar").classList.add("hidden");
+    PROJETO_COMPARTILHAR_ID = null;
+  }
+
+  function adicionarColaborador() {
+    const email = document
+      .getElementById("modal-compartilhar-email")
+      .value.trim();
+    const papel = document.getElementById("modal-compartilhar-papel").value;
+    if (!email || !PROJETO_COMPARTILHAR_ID) return;
+
+    const btn = document.getElementById("btn-adicionar-colaborador");
+
+    // Validação: btn deve existir
+    if (!btn) {
+      console.error("Botão 'btn-adicionar-colaborador' não encontrado no DOM");
+      alert("Erro: Elemento de botão não encontrado. Recarregue a página.");
+      return;
+    }
+
+    const span = btn.querySelector("span");
+    // Procura por <i> ou qualquer elemento com data-lucide
+    let icon = btn.querySelector("i");
+    if (!icon) {
+      icon = btn.querySelector("[data-lucide]");
+    }
+
+    // Validação: span deve existir. Icon é opcional (pode não estar renderizado ainda)
+    if (!span) {
+      console.error("Elemento span não encontrado dentro do botão");
+      alert("Erro: Elemento de interface não encontrado. Recarregue a página.");
+      return;
+    }
+
+    // Desabilitar botão e mostrar status
+    btn.disabled = true;
+    btn.classList.add("opacity-70");
+    span.textContent = "Compartilhando...";
+
+    // Se o icon existe, anima
+    if (icon) {
+      icon.classList.add("animate-spin-fast");
+    }
+
+    google.script.run
+      .withSuccessHandler((colaboradores) => {
+        if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
+          PROJETO_ATUAL.colaboradores = colaboradores;
+          atualizarCabecalhoProjeto();
+        }
+        renderizarModalCompartilhar(
+          document
+            .getElementById("modal-compartilhar-nome-projeto")
+            .textContent.replace("Projeto: ", ""),
+          colaboradores,
+        );
+        document.getElementById("modal-compartilhar-email").value = "";
+        carregarListaProjetos();
+
+        // Re-habilitar botão e remover status
+        btn.disabled = false;
+        btn.classList.remove("opacity-70");
+        span.textContent = "Adicionar";
+        if (icon) {
+          icon.classList.remove("animate-spin-fast");
+        }
+        if (window.lucide) lucide.createIcons();
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao compartilhar:", erro);
+        completarProgressBar();
+        logarErroFrontend("Falha ao compartilhar projeto", {
+          projeto_id: PROJETO_COMPARTILHAR_ID,
+          email_alvo: email,
+          erro_mensagem: erro.message,
+          erro_completo: String(erro),
+        });
+        exibirErroSalvamento("Falha ao compartilhar: " + erro.message);
+
+        // Re-habilitar botão e remover spinner em caso de erro
+        btn.disabled = false;
+        btn.classList.remove("opacity-70");
+        span.textContent = "Adicionar";
+        icon.classList.remove("animate-spin-fast");
+      })
+      .compartilharProjeto(PROJETO_COMPARTILHAR_ID, email, papel);
+  }
+
+  function removerColaboradorUI(email) {
+    if (!PROJETO_COMPARTILHAR_ID) {
+      console.error("PROJETO_COMPARTILHAR_ID não definido");
+      return;
+    }
+
+    if (typeof google === "undefined" || !google.script) {
+      console.error("Google Apps Script não disponível");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler((colaboradores) => {
+        if (PROJETO_ATUAL && PROJETO_ATUAL.id === PROJETO_COMPARTILHAR_ID) {
+          PROJETO_ATUAL.colaboradores = colaboradores;
+          atualizarCabecalhoProjeto();
+        }
+        const nomeProjeto = document.getElementById(
+          "modal-compartilhar-nome-projeto",
+        );
+        if (nomeProjeto) {
+          renderizarModalCompartilhar(
+            nomeProjeto.textContent.replace("Projeto: ", ""),
+            colaboradores,
+          );
+        }
+        carregarListaProjetos();
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao remover colaborador:", erro);
+        logarErroFrontend("Falha ao remover colaborador", {
+          projeto_id: PROJETO_COMPARTILHAR_ID,
+          email_alvo: email,
+          erro_mensagem: erro.message,
+        });
+        exibirErroSalvamento("Falha ao remover colaborador: " + erro.message);
+      })
+      .removerColaborador(PROJETO_COMPARTILHAR_ID, email);
+  }
+
+  function autoSalvarNoGoogle() {
+    idTimeoutAutoSave = null;
+
+    if (!estadoAlterado) return; // nada para salvar
+    if (!PROJETO_ATUAL) return; // nenhum projeto aberto (ex.: nas telas Home/Projetos)
+    if (PROJETO_ATUAL.meuPapel === "visualizacao") return; // sem permissão de edição
+    if (typeof google === "undefined" || !google.script) return;
+
+    exibirIndicadorSalvando(); // Atualiza status para "Salvando..."
+    iniciarProgressBar(); // Inicia progress bar
+
+    const estadoJSON = obterEstadoGeralJSON();
+    google.script.run
+      .withSuccessHandler((info) => {
+        estadoAlterado = false;
+        PROJETO_ATUAL.atualizadoEm = info.atualizadoEm;
+        PROJETO_ATUAL.atualizadoPor = info.atualizadoPor;
+        atualizarCabecalhoProjeto();
+        exibirIndicadorSalvo();
+        completarProgressBar(); // Completa progress bar
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao salvar no Google Apps Script:", erro);
+        exibirErroSalvamento(
+          "Falha ao salvar seu progresso. Tentando novamente em breve...",
+        );
+        exibirIndicadorNaoSalvo();
+        completarProgressBar(); // Completa progress bar mesmo em erro
+        // Mantém estadoAlterado = true para a rede de segurança tentar de novo.
+      })
+      .salvarProjetoAtual(PROJETO_ATUAL.id, estadoJSON);
+  }
+
+  function limparRascunhoGoogle() {
+    if (!PROJETO_ATUAL) return;
+    if (
+      confirm(
+        "Deseja limpar este projeto e voltar ao modelo padrão de fábrica? Isso afeta todos que têm acesso a ele.",
+      )
+    ) {
+      google.script.run
+        .withSuccessHandler(() => location.reload())
+        .withFailureHandler((erro) => {
+          console.error("Erro ao resetar projeto:", erro);
+          exibirErroSalvamento("Falha ao limpar o projeto: " + erro.message);
+        })
+        .resetarProjetoAtual(PROJETO_ATUAL.id);
+    }
+  }
+
+  function exportarArquivoProjeto() {
+    const dados = obterEstadoGeralJSON();
+    const blob = new Blob([dados], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `projeto_mapeamento_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importarArquivoProjeto(event) {
+    const input = event.target;
+    if (!input.files || !input.files[0]) return;
+
+    if (
+      !confirm(
+        "Importar este projeto substituirá TODO o conteúdo atual do documento em tela. Deseja continuar?",
+      )
+    ) {
+      input.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const dados = JSON.parse(e.target.result);
+        if (dados.conteudoHTML) {
+          restaurarConteudoDocumento(dados.conteudoHTML);
+
+          document.querySelectorAll("textarea").forEach((ta) => {
+            ta.value = ta.textContent;
+          });
+
+          if (window.lucide) lucide.createIcons();
+          recalcularContadores();
+
+          marcarComoAlterado();
+          autoSalvarNoGoogle();
+          alert("Projeto importado e salvo com sucesso!");
+        }
+      } catch (err) {
+        alert("Arquivo de projeto inválido!");
+      }
+      input.value = "";
+    };
+    reader.readAsText(input.files[0]);
+  }
+
+  // Controlling mobile sidebar
+  function toggleSidebar() {
+    const sidebar = document.getElementById("default-sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const mainContent = document.getElementById("documento-container");
+
+    if (!sidebar) return;
+
+    const estaFechada = sidebar.classList.contains("-translate-x-full");
+
+    if (estaFechada) {
+      sidebar.classList.remove("-translate-x-full");
+      if (overlay) overlay.classList.remove("hidden");
+      if (mainContent) {
+        mainContent.classList.add(
+          "blur-sm",
+          "pointer-events-none",
+          "select-none",
+        );
+      }
+    } else {
+      sidebar.classList.add("-translate-x-full");
+      if (overlay) overlay.classList.add("hidden");
+      if (mainContent) {
+        mainContent.classList.remove(
+          "blur-sm",
+          "pointer-events-none",
+          "select-none",
+        );
+      }
+    }
+  }
+
+  function fecharSidebarMobile() {
+    if (window.innerWidth < 640) {
+      const sidebar = document.getElementById("default-sidebar");
+      const overlay = document.getElementById("sidebar-overlay");
+      const mainContent = document.getElementById("documento-container");
+
+      if (sidebar && !sidebar.classList.contains("-translate-x-full")) {
+        sidebar.classList.add("-translate-x-full");
+        if (overlay) overlay.classList.add("hidden");
+        if (mainContent)
+          mainContent.classList.remove(
+            "blur-sm",
+            "pointer-events-none",
+            "select-none",
+          );
+      }
+    }
+  }
+
+  // Initializer: a tela sempre começa pela Home. O documento (Nível
+  // 1/Nível 2) só é carregado quando o usuário abre um projeto
+  // específico (abrirProjetoNaTela), já que agora o mesmo login pode
+  // ter vários projetos, próprios ou compartilhados.
+  document.addEventListener("DOMContentLoaded", () => {
+    mostrarAreaHome();
+    try {
+      lucide.createIcons();
+    } catch (e) {}
+    initAuthCheck();
+    // Rede de segurança: caso uma alteração pendente não tenha sido
+    // salva pelo debounce (ex.: falha de rede pontual), tenta novamente
+    // periodicamente em um intervalo bem mais espaçado.
+    setInterval(() => {
+      if (estadoAlterado) autoSalvarNoGoogle();
+    }, AUTO_SAVE_SEGURANCA_MS);
+  });
+
+  function exibirIndicadorSalvo() {
+    let ind = document.getElementById("indicador-salvo");
+    if (!ind) {
+      ind = document.createElement("div");
+      ind.id = "indicador-salvo";
+      ind.className =
+        "fixed bottom-3 left-3 bg-slate-800/80 text-white text-[10px] px-2 py-1 rounded backdrop-blur z-50 transition-opacity opacity-0";
+      document.body.appendChild(ind);
+    }
+    ind.innerText = "☁️ Progresso salvo na conta";
+    ind.classList.remove("opacity-0");
+    setTimeout(() => ind.classList.add("opacity-0"), 2500);
+  }
+
+  // Indicador de erro de salvamento/carregamento (feedback visual para
+  // falhas do google.script.run, que antes falhavam em silêncio).
+  function exibirErroSalvamento(mensagem) {
+    let ind = document.getElementById("indicador-erro");
+    if (!ind) {
+      ind = document.createElement("div");
+      ind.id = "indicador-erro";
+      ind.className =
+        "fixed bottom-3 left-3 bg-red-600/90 text-white text-[11px] px-3 py-2 rounded backdrop-blur z-50 transition-opacity opacity-0 max-w-xs shadow-lg";
+      document.body.appendChild(ind);
+    }
+    ind.innerText = "⚠️ " + mensagem;
+    ind.classList.remove("opacity-0");
+    setTimeout(() => ind.classList.add("opacity-0"), 4000);
+  }
+
+  // Overlay de carregamento exibido enquanto o rascunho salvo é buscado
+  // no Apps Script, evitando o "piscar" do modelo padrão antes de
+  // restaurar o conteúdo real do usuário.
+  function exibirCarregando() {
+    let overlay = document.getElementById("overlay-carregando");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "overlay-carregando";
+      overlay.className =
+        "fixed inset-0 z-50 bg-white/70 backdrop-blur-sm flex items-center justify-center";
+      overlay.innerHTML =
+        '<div class="flex items-center gap-3 bg-white px-5 py-3 rounded-xl shadow-lg border border-slate-200">' +
+        '<div class="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>' +
+        '<span class="text-sm font-medium text-slate-700">Carregando rascunho salvo...</span>' +
+        "</div>";
+      document.body.appendChild(overlay);
+    }
+  }
+
+  function ocultarCarregando() {
+    const overlay = document.getElementById("overlay-carregando");
+    if (overlay) overlay.remove();
+  }
+
+  // ========================================================================
+  // PROGRESS BAR: Barra de carregamento roxa no topo
+  // ========================================================================
+
+  let progressBarTimeout = null;
+  let currentProgress = 0;
+
+  // Inicia a animação da progress bar
+  function iniciarProgressBar() {
+    const bar = document.getElementById("progress-bar");
+    if (!bar) return;
+
+    // Limpa timeout anterior se houver
+    if (progressBarTimeout) clearTimeout(progressBarTimeout);
+
+    // Reseta progress
+    currentProgress = 10;
+    bar.style.width = currentProgress + "%";
+    bar.classList.add("visible");
+
+    // Anima gradualmente até 90%
+    const animar = () => {
+      if (currentProgress < 90) {
+        currentProgress += Math.random() * 30;
+        if (currentProgress > 90) currentProgress = 90;
+        bar.style.width = currentProgress + "%";
+        progressBarTimeout = setTimeout(animar, 300 + Math.random() * 700);
+      }
+    };
+    animar();
+  }
+
+  // Completa a progress bar (100%) e depois a esconde
+  function completarProgressBar() {
+    const bar = document.getElementById("progress-bar");
+    if (!bar) return;
+
+    if (progressBarTimeout) clearTimeout(progressBarTimeout);
+
+    currentProgress = 100;
+    bar.style.width = "100%";
+
+    // Mantém visível por um pouco, depois desaparece suavemente
+    setTimeout(() => {
+      bar.classList.remove("visible");
+      setTimeout(() => {
+        bar.style.width = "0%";
+      }, 200);
+    }, 400);
+  }
+
+  // ========================================================================
+  // TOP BAR: Gerenciamento de nome editável, status e ações de salvamento
+  // ========================================================================
+
+  // Atualiza o indicador de status de salvamento na top bar
+  function atualizarStatusTopbar(status) {
+    const dot = document.getElementById("topbar-status-dot");
+    const texto = document.getElementById("topbar-status-texto");
+    const btnSalvar = document.getElementById("btn-salvar-agora");
+    const btnSair = document.getElementById("btn-sair-sem-salvar");
+
+    if (!dot || !texto) return;
+
+    if (status === "salvo") {
+      dot.className = "w-2 h-2 rounded-full bg-emerald-500";
+      texto.textContent = "Salvo";
+      btnSalvar.classList.add("hidden");
+      btnSair.classList.add("hidden");
+    } else if (status === "salvando") {
+      dot.className = "w-2 h-2 rounded-full bg-blue-500 animate-pulse";
+      texto.textContent = "Salvando...";
+      btnSalvar.classList.add("hidden");
+      btnSair.classList.add("hidden");
+    } else if (status === "nao-salvo") {
+      dot.className = "w-2 h-2 rounded-full bg-orange-500";
+      texto.textContent = "Não salvo";
+      btnSalvar.classList.remove("hidden");
+      btnSair.classList.remove("hidden");
+    }
+  }
+
+  // Mostra indicador "Salvo" por alguns segundos
+  function exibirIndicadorSalvo() {
+    atualizarStatusTopbar("salvo");
+    setTimeout(() => {
+      if (estadoAlterado) atualizarStatusTopbar("nao-salvo");
+    }, 2000);
+  }
+
+  // Mostra indicador "Salvando..."
+  function exibirIndicadorSalvando() {
+    atualizarStatusTopbar("salvando");
+  }
+
+  // Mostra indicador "Não salvo"
+  function exibirIndicadorNaoSalvo() {
+    atualizarStatusTopbar("nao-salvo");
+  }
+
+  // Inicializa a top bar (adiciona event listener para click-to-edit do nome)
+  function inicializarTopbar() {
+    const container = document.getElementById("topbar-nome-container");
+    if (container) {
+      container.onclick = abrirEdicaoNomeProjeto;
+    }
+  }
+
+  // Abre a edição do nome do projeto (click-to-edit)
+  function abrirEdicaoNomeProjeto() {
+    if (!PROJETO_ATUAL || PROJETO_ATUAL.meuPapel === "visualizacao") return;
+
+    const input = document.getElementById("topbar-nome-input");
+    const texto = document.getElementById("topbar-nome-texto");
+
+    input.value = PROJETO_ATUAL.nome;
+    input.classList.remove("hidden");
+    texto.classList.add("hidden");
+    input.focus();
+    input.select();
+
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") salvarNomeProjeto();
+      if (e.key === "Escape") cancelarEdicaoNomeProjeto();
+    };
+
+    input.onblur = () => {
+      setTimeout(() => {
+        if (!document.activeElement.classList.contains("topbar-nome-input")) {
+          salvarNomeProjeto();
+        }
+      }, 100);
+    };
+  }
+
+  // Salva o novo nome do projeto
+  function salvarNomeProjeto() {
+    const input = document.getElementById("topbar-nome-input");
+    const texto = document.getElementById("topbar-nome-texto");
+    const novoNome = input.value.trim();
+
+    if (!novoNome || novoNome === PROJETO_ATUAL.nome) {
+      cancelarEdicaoNomeProjeto();
+      return;
+    }
+
+    if (typeof google === "undefined" || !google.script) return;
+
+    iniciarProgressBar();
+
+    google.script.run
+      .withSuccessHandler((resultado) => {
+        PROJETO_ATUAL.nome = resultado.nome;
+        PROJETO_ATUAL.atualizadoEm = resultado.atualizadoEm;
+        PROJETO_ATUAL.atualizadoPor = resultado.atualizadoPor;
+        atualizarTopbarNome();
+        cancelarEdicaoNomeProjeto();
+        carregarListaProjetos(); // Atualiza lista de projetos
+        exibirIndicadorSalvo();
+        completarProgressBar();
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao renomear projeto:", erro);
+        exibirErroSalvamento("Falha ao renomear projeto: " + erro.message);
+        cancelarEdicaoNomeProjeto();
+        completarProgressBar();
+      })
+      .renomearProjeto(PROJETO_ATUAL.id, novoNome);
+  }
+
+  // Cancela edição do nome
+  function cancelarEdicaoNomeProjeto() {
+    const input = document.getElementById("topbar-nome-input");
+    const texto = document.getElementById("topbar-nome-texto");
+
+    input.classList.add("hidden");
+    texto.classList.remove("hidden");
+  }
+
+  // Atualiza o nome exibido na top bar
+  function atualizarTopbarNome() {
+    const texto = document.getElementById("topbar-nome-texto");
+    if (PROJETO_ATUAL) {
+      texto.textContent = PROJETO_ATUAL.nome;
+    }
+  }
+
+  // Força salvamento imediato
+  function salvarAgoraUI() {
+    if (!estadoAlterado) {
+      exibirErroSalvamento("Não há alterações para salvar.");
+      return;
+    }
+    exibirIndicadorSalvando();
+    autoSalvarNoGoogle();
+  }
+
+  // Sai sem salvar (descarta alterações)
+  function sairSemSalvarUI() {
+    if (!estadoAlterado) {
+      voltarParaProjetos();
+      return;
+    }
+
+    if (confirm("Você tem alterações não salvas. Deseja sair sem salvar?")) {
+      estadoAlterado = false;
+      if (idTimeoutAutoSave) clearTimeout(idTimeoutAutoSave);
+      voltarParaProjetos();
+    }
+  }
+
+  // ============================================================================
+  // FUNÇÕES DE DIAGNÓSTICO E LOGS
+  // ============================================================================
+
+  function abrirModalDiagnostico() {
+    const modal = document.getElementById("modal-diagnostico");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    carregarDiagnostico();
+  }
+
+  function fecharModalDiagnostico() {
+    const modal = document.getElementById("modal-diagnostico");
+    if (!modal) return;
+    modal.classList.add("hidden");
+  }
+
+  function carregarDiagnostico() {
+    if (typeof google === "undefined" || !google.script) {
+      document.getElementById("diagnostico-info").textContent =
+        "Erro: Google Apps Script não disponível";
+      document.getElementById("diagnostico-logs").textContent = "(sem dados)";
+      return;
+    }
+
+    // Mostrar que está carregando
+    document.getElementById("diagnostico-info").textContent =
+      "Carregando informações do sistema...\n\n⚠️  Aviso de Permissões:\nSe é sua primeira vez usando este app, pode ser que uma janela de autorização apareça no Google.\nAutorize para que o script possa acessar suas pastas no Google Drive.";
+    document.getElementById("diagnostico-logs").textContent =
+      "Carregando logs...";
+
+    var timeoutId = setTimeout(() => {
+      document.getElementById("diagnostico-info").textContent =
+        "TIMEOUT: Servidor não respondeu em tempo hábil.\n\nPossíveis causas:\n1. A planilha não está compartilhada com você\n2. Você não autorizou o script na primeira vez\n3. Erro de permissões do Google Apps Script\n4. Falha de rede\n\nTente:\n- Fazer logout e login novamente\n- Recarregar a página\n- Entrar em contato com o administrador";
+      document.getElementById("diagnostico-logs").textContent =
+        "Timeout ao aguardar resposta do servidor.";
+    }, 15000); // 15 segundos de timeout
+
+    google.script.run
+      .withSuccessHandler((resultado) => {
+        clearTimeout(timeoutId);
+        if (resultado === null || resultado === undefined) {
+          console.warn("Resposta null/undefined de obterDiagnosticoSistema");
+          document.getElementById("diagnostico-info").textContent =
+            "Erro: Servidor retornou resposta vazia.\n\nPossível causa:\n- Você não tem permissão para acessar a planilha de projetos\n- Erro de autorização do Google Apps Script\n\nSolução:\n1. Fazer logout e login novamente\n2. Aceitar permissões quando solicitado\n3. Recarregar a página";
+          document.getElementById("diagnostico-logs").textContent =
+            "(sem dados)";
+          return;
+        }
+        if (isAuthErrorLike(resultado)) {
+          showAuthOverlay();
+          document.getElementById("diagnostico-info").textContent =
+            resultado.message || "Autorização necessária para acessar o diagnóstico.";
+          document.getElementById("diagnostico-logs").textContent =
+            Array.isArray(resultado.errors)
+              ? resultado.errors.join("\n")
+              : "(sem dados)";
+          return;
+        }
+        exibirDiagnostico(resultado);
+      })
+      .withFailureHandler((erro) => {
+        clearTimeout(timeoutId);
+        console.error("Erro ao carregar diagnóstico:", erro);
+
+        var mensagemErro = "ERRO: " + (erro.message || String(erro)) + "\n\n";
+
+        // Detecta erro de permissão específico
+        if (
+          erro.message &&
+          erro.message.indexOf("SpreadsheetApp.openById") > -1
+        ) {
+          mensagemErro +=
+            "PROBLEMA IDENTIFICADO: Erro de Autorização do Apps Script\n\n";
+          mensagemErro +=
+            "Causa: O script não tem permissão para acessar a planilha de projetos.\n\n";
+          mensagemErro += "Como resolver:\n";
+          mensagemErro += "1. Faça LOGOUT da sua conta Google\n";
+          mensagemErro += "2. Faça LOGIN novamente\n";
+          mensagemErro += "3. Recarregue esta página\n";
+          mensagemErro += "4. O Google pedirá para você AUTORIZAR o script\n";
+          mensagemErro += '5. Clique em "Autorizar" e aceite as permissões\n';
+          mensagemErro += "6. Tente novamente\n\n";
+          mensagemErro += "Se o problema persistir, contate o administrador.";
+        } else {
+          mensagemErro += "Possíveis causas:\n";
+          mensagemErro += "- Você não tem acesso à planilha de projetos\n";
+          mensagemErro += "- Erro de permissões do Google Apps Script\n";
+          mensagemErro += "- Falha de rede";
+        }
+
+        document.getElementById("diagnostico-info").textContent = mensagemErro;
+        document.getElementById("diagnostico-logs").textContent =
+          "Erro técnico: " + (erro.message || String(erro));
+      })
+      .obterDiagnosticoSistema();
+  }
+
+  function exibirDiagnostico(diagnostico) {
+    // Validação: se diagnostico é null/undefined, trata como erro
+    if (!diagnostico) {
+      document.getElementById("diagnostico-info").textContent =
+        "ERRO: Resposta nula do servidor. Tente novamente.";
+      document.getElementById("diagnostico-logs").textContent =
+        "(sem dados disponíveis)";
+      return;
+    }
+
+    if (diagnostico.ok === false) {
+      document.getElementById("diagnostico-info").textContent =
+        diagnostico.message || "Não foi possível obter o diagnóstico.";
+      document.getElementById("diagnostico-logs").textContent =
+        Array.isArray(diagnostico.errors)
+          ? diagnostico.errors.join("\n")
+          : "(sem dados)";
+      return;
+    }
+
+    // As funções atuais retornam o envelope padronizado { ok, data }.
+    // Mantém compatibilidade com respostas legadas sem envelope.
+    if (diagnostico.ok === true && diagnostico.data !== undefined) {
+      diagnostico = diagnostico.data;
+    }
+
+    let infoTexto = "";
+
+    if (diagnostico.erro) {
+      infoTexto =
+        "ERRO: " + diagnostico.erro + "\n" + (diagnostico.stack || "");
+    } else {
+      infoTexto =
+        "Usuário: " + (diagnostico.usuario || "(desconhecido)") + "\n";
+      infoTexto +=
+        "Total de projetos: " +
+        (diagnostico.total_projetos_do_usuario || 0) +
+        "\n";
+      infoTexto +=
+        "Timestamp: " + (diagnostico.timestamp || "(desconhecido)") + "\n\n";
+      infoTexto += "Projetos:\n";
+      if (diagnostico.projetos && diagnostico.projetos.length > 0) {
+        diagnostico.projetos.forEach((p, i) => {
+          infoTexto += i + 1 + ". [" + p.meu_papel + "] " + p.nome + "\n";
+          infoTexto += "   ID: " + p.id + "\n";
+          infoTexto += "   Dono: " + p.dono + "\n";
+          infoTexto += "   Colaboradores: " + p.colaboradores_qtd + "\n";
+          infoTexto += "   Criado: " + p.criado_em + "\n";
+          infoTexto += "   Atualizado: " + p.atualizado_em + "\n\n";
+        });
+      } else {
+        infoTexto += "(nenhum projeto)\n";
+      }
+    }
+
+    document.getElementById("diagnostico-info").textContent = infoTexto;
+
+    // Exibir logs
+    let logsTexto = "";
+    if (
+      diagnostico.logs &&
+      diagnostico.logs.sucesso &&
+      diagnostico.logs.logs &&
+      diagnostico.logs.logs.length > 0
+    ) {
+      logsTexto = "Total de logs: " + diagnostico.logs.total + "\n\n";
+      diagnostico.logs.logs.forEach((log, i) => {
+        logsTexto += "--- Log #" + (i + 1) + " ---\n";
+        logsTexto += "Data/Hora: " + log.data_hora + "\n";
+        logsTexto += "Usuário: " + log.usuario + "\n";
+        logsTexto += "Tipo: " + log.tipo + "\n";
+        logsTexto += "ID Projeto: " + log.id_projeto + "\n";
+        logsTexto += "Descrição: " + log.descricao + "\n";
+        if (log.extra) {
+          logsTexto += "Extra: " + JSON.stringify(log.extra, null, 2) + "\n";
+        }
+        logsTexto += "\n";
+      });
+    } else if (diagnostico.logs && diagnostico.logs.erro) {
+      logsTexto = "Erro ao carregar logs: " + diagnostico.logs.erro;
+    } else {
+      logsTexto = "(nenhum log disponível)";
+    }
+
+    document.getElementById("diagnostico-logs").textContent = logsTexto;
+  }
+
+  function exportarLogsBruto() {
+    if (typeof google === "undefined" || !google.script) {
+      alert("Erro: Google Apps Script não disponível");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler((resultado) => {
+        if (!resultado) {
+          alert("Erro: Servidor retornou resposta vazia. Tente novamente.");
+          return;
+        }
+
+        const dataStr = JSON.stringify(resultado, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "diagnostico-logs-" + new Date().getTime() + ".json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao exportar logs:", erro);
+        alert("Erro ao exportar logs: " + erro.message);
+      })
+      .obterDiagnosticoSistema();
+  }
+
+  function limparLogsDiagnostico() {
+    if (
+      !confirm(
+        "Tem certeza que deseja limpar todos os logs? Esta ação não pode ser desfeita.",
+      )
+    )
+      return;
+    alert(
+      'Função de limpeza de logs ainda não implementada. Por enquanto, você pode deletar manualmente a aba "Logs" na planilha de banco de dados.',
+    );
+  }
+
+  // Registra erro no backend com contexto completo
+  function logarErroFrontend(mensagem, contexto) {
+    if (typeof google === "undefined" || !google.script) {
+      console.error("Erro (não logado no backend):", mensagem, contexto);
+      return;
+    }
+
+    var detalhes = {
+      mensagem_ui: mensagem,
+      contexto: contexto,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+      projetoAtualId: PROJETO_ATUAL ? PROJETO_ATUAL.id : null,
+    };
+
+    google.script.run
+      .withFailureHandler((erro) => {
+        console.warn(
+          "Aviso: Não foi possível registrar erro no backend:",
+          erro,
+        );
+      })
+      .logarErro_(null, "Erro capturado no front-end: " + mensagem, detalhes);
+  }
+
+  // Melhora função criarNovoProjeto com melhor tratamento de erro
+  function criarNovoProjeto() {
+    const nome = prompt("Nome do novo projeto (ex.: nome da marca/cliente):");
+    if (nome === null) return;
+    if (typeof google === "undefined" || !google.script) return;
+
+    iniciarProgressBar();
+
+    google.script.run
+      .withSuccessHandler((projeto) => {
+        aplicarProjetoNaTela(projeto, null);
+        completarProgressBar();
+      })
+      .withFailureHandler((erro) => {
+        console.error("Erro ao criar projeto:", erro);
+        completarProgressBar();
+        logarErroFrontend("Falha ao criar projeto", {
+          nome: nome,
+          erro_mensagem: erro.message,
+          erro_completo: String(erro),
+        });
+        exibirErroSalvamento("Falha ao criar o projeto: " + erro.message);
+      })
+      .criarProjeto(nome);
+  }
+</script>
